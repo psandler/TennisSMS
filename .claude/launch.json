@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "TennisSms.Web",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/TennisSms.Web", "--launch-profile", "http"],
+      "port": 5234
+    }
+  ]
+}

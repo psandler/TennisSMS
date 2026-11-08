@@ -60,13 +60,17 @@ public sealed class GameWork(GameClock clock, TimeProvider time, IOptions<Tennis
     public DateTime NowLocal => clock.ToLocal(Now);
     public GameClock Clock => clock;
 
-    public async Task<GameUnderLock> LockAsync(IDocumentSession session, Guid gameId, CancellationToken ct)
+    public async Task<GameUnderLock> LockAsync(IDocumentSession session, Guid gameId, CancellationToken ct) =>
+        await TryLockAsync(session, gameId, ct) ?? throw new GameRuleException("That game doesn't exist.");
+
+    /// <summary>Null when there's no such game (e.g. a timer for a game wiped by a simulator reset).</summary>
+    public async Task<GameUnderLock?> TryLockAsync(IDocumentSession session, Guid gameId, CancellationToken ct)
     {
         // UPDLOCK, HOLDLOCK on the stream row: a second command for this game waits until
         // the first commits, then sees its result. This is what keeps two YESes from both
         // taking the last spot.
         var stream = await session.Events.FetchForExclusiveWriting<Game>(gameId, ct);
-        if (stream.Aggregate is null) throw new GameRuleException("That game doesn't exist.");
+        if (stream.Aggregate is null) return null;
 
         var players = await PlayerDirectory.LoadAsync(session, Options.Organizer.PhoneE164, ct);
         var game = stream.Aggregate;

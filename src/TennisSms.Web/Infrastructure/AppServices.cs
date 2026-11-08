@@ -1,6 +1,7 @@
 using TennisSms.Core.Time;
 using TennisSms.Web.Games;
 using TennisSms.Web.Inbound;
+using TennisSms.Web.Simulator;
 using TennisSms.Web.Sms;
 
 namespace TennisSms.Web.Infrastructure;
@@ -22,6 +23,10 @@ public static class AppServices
             case "Simulator":
                 services.AddSingleton<SimulatorGateway>();
                 services.AddSingleton<ISmsSender>(sp => sp.GetRequiredService<SimulatorGateway>());
+                // The simulator page and its engine exist only with this gateway (spec §11.3).
+                services.AddSingleton<SimulatorEngine>();
+                services.AddSingleton<SimulatorView>();
+                services.AddHostedService<SimulatorLoop>();
                 break;
             default:
                 throw new InvalidOperationException($"Unknown SMS gateway '{gateway}'. v0.1 only has 'Simulator'.");

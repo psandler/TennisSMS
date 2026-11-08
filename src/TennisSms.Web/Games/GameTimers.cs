@@ -50,8 +50,8 @@ public static class GameTimerHandler
     private static async Task<OutgoingMessages> Fire(
         IGameTimer timer, IDocumentSession session, GameWork work, Func<Game, GameContext, Decision> decide, CancellationToken ct)
     {
-        var locked = await work.LockAsync(session, timer.GameId, ct);
-        if (locked.Game.StartsAtLocal != timer.StartsAtLocal) return [];
+        var locked = await work.TryLockAsync(session, timer.GameId, ct);
+        if (locked is null || locked.Game.StartsAtLocal != timer.StartsAtLocal) return [];
         return [.. work.Apply(locked, decide(locked.Game, locked.Context))];
     }
 }

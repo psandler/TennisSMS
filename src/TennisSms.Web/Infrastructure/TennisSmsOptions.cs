@@ -9,7 +9,7 @@ public sealed class TennisSmsOptions
     public string Brand { get; set; } = "TennisSMS";
 
     /// <summary>Public base URL for links in texts, without a trailing slash.</summary>
-    public string BaseUrl { get; set; } = "http://localhost:5199";
+    public string BaseUrl { get; set; } = "http://localhost:5234";
 
     /// <summary>The service's own number (the "to" on inbound texts).</summary>
     public string ServiceNumber { get; set; } = "+15550100000";

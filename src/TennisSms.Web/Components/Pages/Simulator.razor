@@ -1,0 +1,268 @@
+@page "/dev/simulator"
+@rendermode InteractiveServer
+@implements IDisposable
+@using TennisSms.Core.Players
+@using TennisSms.Web.Simulator
+@using TennisSms.Web.Sms
+@inject IServiceProvider Services
+@inject IWebHostEnvironment Env
+
+<PageTitle>Phone simulator</PageTitle>
+
+@if (_engine is null || _view is null)
+{
+    <p class="sim-unavailable">The phone simulator only runs in Development with the Simulator SMS gateway.</p>
+}
+else
+{
+    <div class="sim">
+        <header class="sim-bar">
+            <h1>Phone simulator</h1>
+            <div class="sim-group">
+                <button @onclick="() => Do(_engine.ResetAsync)" disabled="@_engine.Busy" title="Wipe all data and seed 8 players (Pending)">Reset</button>
+                <button @onclick="() => Do(_engine.JoinAllAsync)" disabled="@_engine.Busy" title="Every seeded player texts JOIN">JOIN all</button>
+                <button @onclick="() => Do(_engine.QuickGameAsync)" disabled="@_engine.Busy" title="Doubles ~20 hours out, everyone invited">Quick game</button>
+                <a href="/" target="_blank">Organizer pages ↗</a>
+            </div>
+            <div class="sim-group">
+                <button class="@(_engine.Paused ? "on" : "")" @onclick="() => _engine.SetPaused(!_engine.Paused)">
+                    @(_engine.Paused ? "Resume auto-replies" : "Pause auto-replies")
+                </button>
+                <button @onclick="() => Do(_engine.StepAsync)" disabled="@(_snapshot?.PendingCount is null or 0)">Step</button>
+                <span class="muted">@(_snapshot?.PendingCount ?? 0) waiting</span>
+                <label>Delay <input type="number" min="0" max="60" @bind="MinDelaySeconds" />–<input type="number" min="0" max="60" @bind="MaxDelaySeconds" /> s</label>
+                <label>OUT after <input type="number" min="1" max="600" @bind="OutAfterSeconds" /> s</label>
+            </div>
+            <div class="sim-group">
+                <span class="muted">Scenarios (each resets first):</span>
+                @foreach (var scenario in Scenarios.All)
+                {
+                    <button title="@scenario.Description" @onclick="() => Do(() => _engine.RunScenarioAsync(scenario))" disabled="@_engine.Busy">@scenario.Name</button>
+                }
+            </div>
+            @if (_engine.Busy)
+            {
+                <div class="sim-status">Working… @_engine.Status</div>
+            }
+            else if (_error is not null)
+            {
+                <div class="sim-error">@_error</div>
+            }
+            else if (_engine.Status is not null)
+            {
+                <div class="sim-status">@_engine.Status</div>
+            }
+        </header>
+
+        <div class="sim-body">
+            <section class="phones">
+                @foreach (var phone in _snapshot?.Phones ?? [])
+                {
+                    var number = phone.Phone.Number;
+                    <article class="phone @phone.Phone.Kind.ToString().ToLowerInvariant()">
+                        <div class="phone-head">
+                            <strong>@phone.Phone.Name</strong>
+                            <span class="muted">@number</span>
+                            @if (phone.Consent is { } consent)
+                            {
+                                <span class="badge @consent.ToString().ToLowerInvariant()">@consent</span>
+                            }
+                            else if (phone.Phone.Kind == SimPhoneKind.Player)
+                            {
+                                <span class="badge none">not seeded</span>
+                            }
+                        </div>
+
+                        <div class="thread">
+                            @* column-reverse keeps the newest message in view without any script *@
+                            @foreach (var m in Enumerable.Reverse(phone.Thread))
+                            {
+                                var fromPhone = m.Direction == MessageDirection.Inbound;
+                                <div class="msg @(fromPhone ? "from-phone" : "to-phone") @(m.Accepted == false ? "failed" : "")">
+                                    <div>
+                                        @foreach (var (text, isLink) in SimulatorView.Linkify(m.Body))
+                                        {
+                                            if (isLink) { <a href="@text" target="_blank">@text</a> } else { @text }
+                                        }
+                                    </div>
+                                    <div class="meta">
+                                        @m.At.ToLocalTime().ToString("h:mm:ss")
+                                        @if (fromPhone && m.Outcome is not null) { <span> · @m.Outcome</span> }
+                                        @if (!fromPhone && m.Kind is not null) { <span> · @m.Kind</span> }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        @foreach (var t in phone.Typing)
+                        {
+                            var left = Math.Max(0, (t.DueAt - DateTimeOffset.UtcNow).TotalSeconds);
+                            <div class="typing">typing… @(_engine.Paused ? "(paused)" : $"{left:0}s") · @t.Label</div>
+                        }
+
+                        <div class="quick">
+                            @foreach (var word in QuickReplies)
+                            {
+                                <button @onclick="() => Send(number, word)">@word</button>
+                            }
+                        </div>
+                        <form class="free" @onsubmit="() => SendDraft(number)">
+                            <input placeholder="Type a text…" @bind="_drafts[number]" />
+                            <button type="submit">Send</button>
+                        </form>
+
+                        @if (phone.Phone.Kind == SimPhoneKind.Player)
+                        {
+                            <label class="auto">
+                                Auto-reply
+                                <select value="@phone.Mode" @onchange="e => _engine.SetMode(number, Enum.Parse<AutoReplyMode>((string)e.Value!))">
+                                    @foreach (var mode in Enum.GetValues<AutoReplyMode>())
+                                    {
+                                        <option value="@mode">@mode.Label()</option>
+                                    }
+                                </select>
+                            </label>
+                        }
+                    </article>
+                }
+            </section>
+
+            <aside class="side">
+                <h2>Timers</h2>
+                @if (_snapshot is { Timers.Count: > 0 })
+                {
+                    <table class="timers">
+                        <thead><tr><th>Game</th><th>Timer</th><th>Due</th><th>Status</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var row in _snapshot.Timers)
+                            {
+                                <tr>
+                                    <td>@row.Game</td>
+                                    <td>@row.Timer</td>
+                                    <td>@row.DueLocal.ToString("ddd h:mm tt")</td>
+                                    <td class="status">@row.Status</td>
+                                    <td>
+                                        @if (row.FireNow is { } fire)
+                                        {
+                                            <button @onclick="() => Do(() => _engine.InvokeAsync(fire))">Fire now</button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <p class="muted">No upcoming games.</p>
+                }
+
+                <h2>Event timeline <span class="muted">(newest first)</span></h2>
+                <ol class="timeline">
+                    @foreach (var e in _snapshot?.Timeline ?? [])
+                    {
+                        <li>
+                            <span class="muted">@e.At.ToLocalTime().ToString("h:mm:ss")</span>
+                            <strong>@e.Type</strong>
+                            <span class="stream">@e.Stream</span>
+                            @if (e.Details.Length > 0) { <div class="details">@e.Details</div> }
+                        </li>
+                    }
+                </ol>
+            </aside>
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly string[] QuickReplies = ["YES", "NO", "OUT", "1", "2", "JOIN", "STOP", "HELP"];
+
+    private SimulatorEngine? _engine;
+    private SimulatorView? _view;
+    private SimulatorSnapshot? _snapshot;
+    private readonly Dictionary<string, string> _drafts = new();
+    private string? _error;
+    private Timer? _timer;
+    private int _refreshing;
+
+    private int MinDelaySeconds
+    {
+        get => (int)(_engine?.MinDelay.TotalSeconds ?? 0);
+        set { if (_engine is not null) _engine.MinDelay = TimeSpan.FromSeconds(Math.Max(0, value)); }
+    }
+
+    private int MaxDelaySeconds
+    {
+        get => (int)(_engine?.MaxDelay.TotalSeconds ?? 0);
+        set { if (_engine is not null) _engine.MaxDelay = TimeSpan.FromSeconds(Math.Max(0, value)); }
+    }
+
+    private int OutAfterSeconds
+    {
+        get => (int)(_engine?.OutAfter.TotalSeconds ?? 0);
+        set { if (_engine is not null) _engine.OutAfter = TimeSpan.FromSeconds(Math.Max(1, value)); }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Env.IsDevelopment()) return;
+        _engine = Services.GetService<SimulatorEngine>();
+        _view = Services.GetService<SimulatorView>();
+        if (_engine is null || _view is null) return;
+
+        foreach (var phone in _engine.Phones) _drafts[phone.Number] = "";
+        _engine.Changed += OnEngineChanged;
+        await RefreshAsync();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // Live updates: poll once a second (also ticks the "typing…" countdowns).
+        if (firstRender && _engine is not null)
+            _timer = new Timer(_ => _ = InvokeAsync(RefreshAsync), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    private void OnEngineChanged() => _ = InvokeAsync(RefreshAsync);
+
+    private async Task RefreshAsync()
+    {
+        if (_view is null || Interlocked.Exchange(ref _refreshing, 1) == 1) return;
+        try
+        {
+            _snapshot = await _view.LoadAsync();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Couldn't load: {ex.Message}";
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _refreshing, 0);
+        }
+    }
+
+    private async Task Do(Func<Task> action)
+    {
+        _error = null;
+        try { await action(); }
+        catch (Exception ex) { _error = ex.Message; }
+        await RefreshAsync();
+    }
+
+    private Task Send(string number, string body) => Do(() => _engine!.SendAsync(number, body));
+
+    private async Task SendDraft(string number)
+    {
+        var body = _drafts[number];
+        if (string.IsNullOrWhiteSpace(body)) return;
+        _drafts[number] = "";
+        await Send(number, body);
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+        if (_engine is not null) _engine.Changed -= OnEngineChanged;
+    }
+}
