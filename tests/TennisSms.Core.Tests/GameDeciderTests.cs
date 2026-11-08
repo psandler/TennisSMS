@@ -303,6 +303,21 @@ public class TimerAndConsentTests
     }
 
     [Fact]
+    public void Moving_the_start_time_rearms_the_reminder_and_alert_but_a_location_change_does_not()
+    {
+        var game = Doubles(Added(Mike), new ReminderIssued(), new CancellationWindowAlertIssued());
+
+        var sameStart = GameEvolver.From([Scheduled(), Added(Mike), new ReminderIssued(), new CancellationWindowAlertIssued(),
+            new GameDetailsChanged(Start, End, "other courts")]);
+        Assert.True(sameStart.ReminderSent);
+        Assert.True(sameStart.NotFullAlertSent);
+
+        GameEvolver.Apply(game, new GameDetailsChanged(Start.AddDays(1), End.AddDays(1), game.Location));
+        Assert.False(game.ReminderSent);
+        Assert.False(game.NotFullAlertSent);
+    }
+
+    [Fact]
     public void Reminder_skips_everyone_who_just_got_game_on()
     {
         var late = Times.ReminderAt.AddMinutes(5);

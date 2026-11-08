@@ -15,12 +15,12 @@ Tennis Game Scheduler: an SMS-first service that fills tennis games (singles/dou
 - `docs/overview.md`: plain-language description of how the service works.
 - `docs/spec.md`: technical spec (v0.1 / MVP draft, under review).
 
-Status: building v0.1. Skeleton and core domain logic exist; wiring, simulator, and organizer pages are next. Don't change the docs unless asked.
+Status: building v0.1. Skeleton, core domain logic, and wiring (handlers, inbound pipeline, outbox, simulator gateway, timers) exist; the simulator page and organizer pages are next. Don't change the docs unless asked.
 
 ## Layout
 
 - `src/TennisSms.Core`: domain only. Events, `Game`/`Player` aggregates, `GameDecider` (pure decisions: state + command → events + notices), reply parser, message templates (`MessageComposer`, GSM-7 checks), `GameClock` (local time → UTC). No database or Wolverine references; JasperFx.Events is there only for Polecat's aggregate source generator.
-- `src/TennisSms.Web`: the single app. Polecat/Wolverine setup (`Infrastructure/Storage.cs`), handlers, Blazor pages. Blazor talks to handlers in-process via Wolverine, not over HTTP.
+- `src/TennisSms.Web`: the single app. Polecat/Wolverine setup (`Infrastructure/Storage.cs`, `AppServices.cs`), `Sms/` (gateway abstraction, simulator gateway, `SendSms` outbox handler, `MessageLog`), `Games/` and `Players/` (commands and handlers; `GameWork` locks a game, applies a decision, renders texts), `Inbound/` (the inbound pipeline and reply resolver), Blazor pages. Blazor talks to handlers in-process via Wolverine, not over HTTP. Wolverine only discovers handler classes whose names end in `Handler`.
 - `tests/TennisSms.Core.Tests`: fast unit tests. `tests/TennisSms.IntegrationTests`: against SQL Server 2025 (`TennisSms_Tests` on localhost, override with `TENNISSMS_TEST_DB`).
 - Local dev database: `TennisSms` on the default local SQL Server 2025 instance, Windows auth. Created on startup in Development.
 

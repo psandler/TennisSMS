@@ -130,6 +130,13 @@ public static class GeneralMessages
 
     public const string NotSignedUp = "Reply JOIN to sign up for game invites.";
 
+    /// <summary>To the organizer, once, when replies to unknown numbers hit the hourly cap (spec §6.4).</summary>
+    public static string UnknownSendersPaused(string brand) =>
+        $"{brand}: Lots of texts from unknown numbers. Replies to them are paused for an hour.";
+
+    /// <summary>Most games a "Which game?" text can list and still fit one segment.</summary>
+    public const int MaxChoices = 4;
+
     /// <summary>"Which game? 1) Fri 11/13 1pm 2) Sun 11/15 9am. Reply 1 or 2, or use the links."</summary>
     public static string WhichGame(IReadOnlyList<DateTime> gameStartsLocal)
     {

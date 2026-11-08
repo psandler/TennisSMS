@@ -106,7 +106,8 @@ public class MessageTests
                      GeneralMessages.JoinConfirmed("TennisSMS"), GeneralMessages.StopConfirmed("TennisSMS"),
                      GeneralMessages.Help("TennisSMS"), GeneralMessages.UnknownNumberJoin, GeneralMessages.Unrecognized,
                      GeneralMessages.NoOpenInvites, GeneralMessages.NoUpcomingGames, GeneralMessages.NotSignedUp,
-                     GeneralMessages.WhichGame(three),
+                     GeneralMessages.WhichGame(three), GeneralMessages.UnknownSendersPaused("TennisSMS"),
+                     GeneralMessages.WhichGame(Enumerable.Repeat(new DateTime(2026, 12, 30, 10, 30, 0), GeneralMessages.MaxChoices).ToList()),
                  })
             Assert.True(Gsm7.FitsOneSegment(text), text);
 

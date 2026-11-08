@@ -1,53 +1,14 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Polecat;
 using TennisSms.Core.Games;
 using TennisSms.Core.Players;
-using TennisSms.Core.Time;
 using TennisSms.Web.Games;
-using TennisSms.Web.Infrastructure;
-using Wolverine;
 using Wolverine.Tracking;
 
 namespace TennisSms.IntegrationTests;
 
-/// <summary>
-/// Boots Polecat + Wolverine against a real SQL Server 2025 database, with the app's own
-/// configuration. Override the connection with TENNISSMS_TEST_DB.
-/// </summary>
-public sealed class AppHostFixture : IAsyncLifetime
-{
-    public static string ConnectionString =>
-        Environment.GetEnvironmentVariable("TENNISSMS_TEST_DB")
-        ?? "Server=localhost;Database=TennisSms_Tests;Integrated Security=true;TrustServerCertificate=True";
-
-    private IHost? _host;
-    public IHost Host => _host ?? throw new InvalidOperationException("Host failed to start.");
-
-    public async Task InitializeAsync()
-    {
-        await Storage.EnsureDatabaseExistsAsync(ConnectionString);
-
-        _host = await Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
-            .ConfigureServices(services =>
-            {
-                services.AddSingleton(TimeProvider.System);
-                services.AddSingleton(GameClock.Chicago());
-                services.AddTennisSmsStorage(ConnectionString);
-            })
-            .UseWolverine(opts => opts.ConfigureTennisSmsWolverine())
-            .StartAsync();
-    }
-
-    public async Task DisposeAsync()
-    {
-        if (_host is null) return;
-        await _host.StopAsync();
-        _host.Dispose();
-    }
-}
-
-public class StorageSmokeTests(AppHostFixture fixture) : IClassFixture<AppHostFixture>
+[Collection(AppCollection.Name)]
+public class StorageSmokeTests(AppHostFixture fixture)
 {
     [Fact]
     public async Task Scheduling_a_game_through_Wolverine_writes_the_event_and_inline_snapshot()
@@ -68,6 +29,33 @@ public class StorageSmokeTests(AppHostFixture fixture) : IClassFixture<AppHostFi
 
         var events = await session.Events.FetchStreamAsync(id);
         Assert.IsType<GameScheduled>(Assert.Single(events).Data);
+    }
+
+    [Fact]
+    public async Task Exclusive_fetch_makes_a_second_writer_wait_for_the_first_to_commit()
+    {
+        var id = Guid.NewGuid();
+        var start = DateTime.Today.AddDays(5).AddHours(13);
+        await fixture.Host.InvokeMessageAndWaitAsync(new ScheduleGame(id, GameFormat.Doubles, start, start.AddHours(1), "the club"));
+        var store = fixture.Services.GetRequiredService<IDocumentStore>();
+
+        await using var first = store.LightweightSession();
+        var stream = await first.Events.FetchForExclusiveWriting<Game>(id);
+
+        var second = Task.Run(async () =>
+        {
+            await using var s = store.LightweightSession();
+            var other = await s.Events.FetchForExclusiveWriting<Game>(id);
+            return other.Aggregate!.ReminderSent;
+        });
+
+        await Task.Delay(750);
+        Assert.False(second.IsCompleted, "The second writer should be waiting on the lock.");
+
+        stream.AppendOne(new ReminderIssued());
+        await first.SaveChangesAsync();
+
+        Assert.True(await second, "The second writer should see the first writer's event.");
     }
 
     [Fact]

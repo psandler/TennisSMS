@@ -1,4 +1,3 @@
-using TennisSms.Core.Time;
 using TennisSms.Web.Components;
 using TennisSms.Web.Infrastructure;
 using Wolverine;
@@ -11,9 +10,7 @@ var connectionString = builder.Configuration.GetConnectionString("TennisSms")
 if (builder.Environment.IsDevelopment())
     await Storage.EnsureDatabaseExistsAsync(connectionString);
 
-builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton(GameClock.Chicago());
-builder.Services.AddTennisSmsStorage(connectionString);
+builder.Services.AddTennisSms(builder.Configuration, connectionString);
 builder.Host.UseWolverine(opts => opts.ConfigureTennisSmsWolverine());
 
 builder.Services.AddRazorComponents()

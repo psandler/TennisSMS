@@ -4,7 +4,10 @@ using Microsoft.Data.SqlClient;
 using Polecat;
 using TennisSms.Core.Games;
 using TennisSms.Core.Players;
+using TennisSms.Web.Games;
+using TennisSms.Web.Sms;
 using Wolverine;
+using Wolverine.ErrorHandling;
 using Wolverine.Polecat;
 
 namespace TennisSms.Web.Infrastructure;
@@ -27,6 +30,9 @@ public static class Storage
                 opts.Projections.Snapshot<Player>(SnapshotLifecycle.Inline);
 
                 opts.Schema.For<Player>().UniqueIndex(x => x.PhoneE164);
+
+                // Read models (spec §4.5), written in the same transaction as the events.
+                opts.Projections.Add<PageLinkProjection>(ProjectionLifecycle.Inline);
             })
             .ApplyAllDatabaseChangesOnStartup()
             .IntegrateWithWolverine();
@@ -43,6 +49,21 @@ public static class Storage
         opts.Policies.AutoApplyTransactions();
 
         opts.ApplicationAssembly = typeof(Storage).Assembly;
+
+        // Every local queue is backed by the database: cascaded texts, scheduled timers and
+        // inbound texts survive a restart (spec §6.1, §8.2, §9).
+        opts.Policies.UseDurableLocalQueues();
+
+        // Inbound texts and outgoing texts are each handled one at a time, in order.
+        opts.LocalQueueFor<InboundSms>().Sequential();
+        opts.LocalQueueFor<SendSms>().Sequential();
+
+        // Two commands for the same game: the second waits on the stream lock, and if it
+        // still loses a race it's re-run from the top against the new state (spec §4.4).
+        opts.OnException<JasperFx.Events.StreamLockedException>()
+            .RetryWithCooldown(TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(250));
+        opts.OnException<JasperFx.ConcurrencyException>()
+            .RetryWithCooldown(TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(250));
     }
 
     /// <summary>Creates the database if it doesn't exist. Development and tests only.</summary>

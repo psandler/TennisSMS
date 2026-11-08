@@ -48,6 +48,12 @@ public sealed partial class Game
 
     public void Apply(GameDetailsChanged e)
     {
+        // A new start time means a new reminder and not-full alert are due.
+        if (e.StartsAtLocal != StartsAtLocal)
+        {
+            ReminderSent = false;
+            NotFullAlertSent = false;
+        }
         StartsAtLocal = e.StartsAtLocal;
         EndsAtLocal = e.EndsAtLocal;
         Location = e.Location;
