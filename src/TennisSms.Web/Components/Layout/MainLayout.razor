@@ -1,4 +1,23 @@
 ﻿@inherits LayoutComponentBase
+@inject IWebHostEnvironment Env
+
+<AuthorizeView>
+    <Authorized>
+        <nav class="topnav">
+            <a class="brand" href="/">TennisSMS</a>
+            <NavLink href="/" Match="NavLinkMatch.All">Games</NavLink>
+            <NavLink href="/games/new">New game</NavLink>
+            <NavLink href="/players">Players</NavLink>
+            @if (Env.IsDevelopment())
+            {
+                <NavLink href="/dev/simulator">Simulator</NavLink>
+            }
+            <form method="post" action="/logout" class="logout">
+                <button type="submit">Log out</button>
+            </form>
+        </nav>
+    </Authorized>
+</AuthorizeView>
 
 @Body
 

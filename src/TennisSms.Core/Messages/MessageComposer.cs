@@ -134,6 +134,10 @@ public static class GeneralMessages
     public static string UnknownSendersPaused(string brand) =>
         $"{brand}: Lots of texts from unknown numbers. Replies to them are paused for an hour.";
 
+    /// <summary>The organizer's one-time login code (spec §11.1).</summary>
+    public static string LoginCode(string brand, string code, int minutes) =>
+        $"{brand} login code: {code}. It expires in {minutes} minutes. If you didn't ask for it, ignore this text.";
+
     /// <summary>Most games a "Which game?" text can list and still fit one segment.</summary>
     public const int MaxChoices = 4;
 

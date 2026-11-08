@@ -78,6 +78,9 @@ public sealed class GameWork(GameClock clock, TimeProvider time, IOptions<Tennis
         return new GameUnderLock(stream, context, players);
     }
 
+    public Task<PlayerDirectory> LoadPlayersAsync(IQuerySession session, CancellationToken ct) =>
+        PlayerDirectory.LoadAsync(session, Options.Organizer.PhoneE164, ct);
+
     /// <summary>Appends the decision's events and returns its texts, rendered against the new state.</summary>
     public List<SendSms> Apply(GameUnderLock locked, Decision decision)
     {

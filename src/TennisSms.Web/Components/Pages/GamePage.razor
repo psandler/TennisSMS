@@ -1,0 +1,231 @@
+@page "/games/{Id:guid}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@implements IDisposable
+@using Microsoft.Extensions.Options
+@using TennisSms.Web.Infrastructure
+@inject OrganizerQueries Queries
+@inject IMessageBus Bus
+@inject IOptions<TennisSmsOptions> Options
+
+<PageTitle>Game · TennisSMS</PageTitle>
+
+<main class="page">
+    @if (_detail is null)
+    {
+        <p class="muted">@(_loaded ? "That game doesn't exist." : "Loading…")</p>
+    }
+    else
+    {
+        var g = _detail.Game;
+        <div class="heading">
+            <h1>@Ui.When(g) <span class="muted">@g.Format</span></h1>
+            <span class="badge @Ui.StatusClass(g)">@Ui.Status(g)</span>
+        </div>
+        <p>@g.Location · @g.ConfirmedCount of @g.Capacity playing</p>
+
+        @if (_error is not null)
+        {
+            <p class="error">@_error</p>
+        }
+        @if (_notice is not null)
+        {
+            <p class="notice">@_notice</p>
+        }
+
+        <section class="roster">
+            @RosterGroup("Playing", ParticipationStatus.Confirmed, canRemove: true)
+            @RosterGroup("Invited, no answer yet", ParticipationStatus.Invited, canRemove: true)
+            @RosterGroup("Declined", ParticipationStatus.Declined, canRemove: false)
+            @RosterGroup("Invitation closed", ParticipationStatus.Closed, canRemove: false)
+            @RosterGroup("Dropped out", ParticipationStatus.Dropped, canRemove: false)
+            @RosterGroup("Removed", ParticipationStatus.Removed, canRemove: false)
+        </section>
+
+        @if (!g.IsClosedForChanges)
+        {
+            var closed = _detail.With(ParticipationStatus.Closed).Count(p => _detail.Players.GetValueOrDefault(p.PlayerId)?.ConsentStatus == ConsentStatus.OptedIn);
+            @if (g.Status == GameStatus.Open && closed > 0)
+            {
+                <div class="card row">
+                    <span>@closed @(closed == 1 ? "player was" : "players were") told the game filled or had an invitation closed.</span>
+                    <button class="primary" disabled="@_busy" @onclick="() => Run(new ReinviteClosedPlayers(Id), BusyText.Reinvite)">Re-invite them</button>
+                </div>
+            }
+
+            <h2>Invite more</h2>
+            @if (g.Status == GameStatus.Full)
+            {
+                <p class="muted">The game is full. Invitations open again if someone drops out.</p>
+            }
+            else
+            {
+                <RosterPicker Players="_detail.Eligible.ToList()" Choices="_choices" Empty="Everyone who has opted in is already in, invited, or declined." />
+                @if (_choices.Any(c => c.Value != RosterChoice.None))
+                {
+                    <div class="row actions">
+                        <button class="primary" disabled="@_busy" @onclick="SaveRosterAsync">Send invitations</button>
+                    </div>
+                }
+            }
+
+            <h2>Change time or place</h2>
+            <div class="card stack">
+                <div class="row">
+                    <label>Date <input type="date" @bind="_date" /></label>
+                    <label>Start <input type="time" step="900" @bind="_start" /></label>
+                    <label>End <input type="time" step="900" @bind="_end" /></label>
+                </div>
+                <label>Location <input class="wide" @bind="_location" /></label>
+                <div class="row">
+                    <button disabled="@_busy" @onclick="SaveDetailsAsync">Save and text everyone</button>
+                    <span class="muted">Playing and invited players each get one text with the new details.</span>
+                </div>
+            </div>
+
+            <h2>Cancel game</h2>
+            @if (_confirmCancel)
+            {
+                <div class="card row danger">
+                    <span>Cancel this game and text everyone playing or invited?</span>
+                    <button class="danger" disabled="@_busy" @onclick="() => Run(new CancelGame(Id), BusyText.Cancel)">Yes, cancel it</button>
+                    <button @onclick="() => _confirmCancel = false">No</button>
+                </div>
+            }
+            else
+            {
+                <button class="danger" @onclick="() => _confirmCancel = true">Cancel game…</button>
+            }
+        }
+
+        <h2>Messages for this game</h2>
+        @if (_detail.History.Count == 0)
+        {
+            <p class="muted">No texts yet.</p>
+        }
+        else
+        {
+            <table class="list history">
+                <thead><tr><th>Time</th><th></th><th>Who</th><th>Text</th><th>Result</th></tr></thead>
+                <tbody>
+                    @foreach (var m in _detail.History.AsEnumerable().Reverse())
+                    {
+                        var inbound = m.Direction == MessageDirection.Inbound;
+                        <tr class="@(inbound ? "inbound" : "")">
+                            <td class="nowrap">@Queries.ToLocal(m.At).ToString("ddd h:mm tt")</td>
+                            <td>@(inbound ? "→ in" : "← out")</td>
+                            <td>@WhoIs(m.Phone)</td>
+                            <td>@m.Body</td>
+                            <td class="muted">@(inbound ? m.Outcome : m.Accepted == false ? $"failed: {m.Error}" : m.Kind)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
+</main>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private GameDetail? _detail;
+    private bool _loaded;
+    private readonly Dictionary<Guid, RosterChoice> _choices = [];
+    private DateOnly _date;
+    private TimeOnly _start, _end;
+    private string _location = "";
+    private bool _confirmCancel, _busy;
+    private string? _error, _notice;
+    private Timer? _timer;
+
+    private static class BusyText
+    {
+        public const string Reinvite = "Invitations re-sent.";
+        public const string Cancel = "Game cancelled. Everyone playing or invited has been texted.";
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+        if (_detail is { } d)
+        {
+            _date = DateOnly.FromDateTime(d.Game.StartsAtLocal);
+            _start = TimeOnly.FromDateTime(d.Game.StartsAtLocal);
+            _end = TimeOnly.FromDateTime(d.Game.EndsAtLocal);
+            _location = d.Game.Location;
+        }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // Players reply by text at any time: refresh the roster and history every few seconds.
+        if (firstRender)
+            _timer = new Timer(_ => InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); }),
+                null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+    }
+
+    private async Task LoadAsync()
+    {
+        _detail = await Queries.GameAsync(Id);
+        _loaded = true;
+    }
+
+    private RenderFragment RosterGroup(string title, ParticipationStatus status, bool canRemove) => __builder =>
+    {
+        var people = _detail!.With(status).ToList();
+        if (people.Count == 0) return;
+        <div class="roster-group">
+            <h3>@title <span class="muted">(@people.Count)</span></h3>
+            <ul>
+                @foreach (var p in people)
+                {
+                    <li>
+                        <span>@_detail.NameOf(p.PlayerId)</span>
+                        @if (status == ParticipationStatus.Closed)
+                        {
+                            <span class="muted">@Ui.CloseReason(p.CloseReason)</span>
+                        }
+                        @if (canRemove && !_detail.Game.IsClosedForChanges)
+                        {
+                            <button class="link" disabled="@_busy" @onclick="() => Run(new RemovePlayerFromGame(Id, p.PlayerId), null)">remove</button>
+                        }
+                    </li>
+                }
+            </ul>
+        </div>
+    };
+
+    private string WhoIs(string phone) =>
+        phone == Options.Value.Organizer.PhoneE164 ? "You"
+        : _detail!.Players.Values.FirstOrDefault(p => p.PhoneE164 == phone)?.Name ?? Ui.Phone(phone);
+
+    private Task SaveRosterAsync() =>
+        Run(new AddAndInvite(Id, _choices.Add(), _choices.Invite()), "Invitations sent.", after: _choices.Clear);
+
+    private Task SaveDetailsAsync() =>
+        Run(new ChangeGameDetails(Id, _date.ToDateTime(_start), _date.ToDateTime(_end), _location), "Saved.");
+
+    private async Task Run(object command, string? notice, Action? after = null)
+    {
+        _error = _notice = null;
+        _busy = true;
+        try
+        {
+            await Bus.InvokeAsync(command);
+            after?.Invoke();
+            _notice = notice;
+            _confirmCancel = false;
+        }
+        catch (GameRuleException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+            await LoadAsync();
+        }
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

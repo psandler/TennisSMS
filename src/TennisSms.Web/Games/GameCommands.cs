@@ -8,6 +8,9 @@ namespace TennisSms.Web.Games;
 
 // Organizer commands. The Blazor pages send these in-process with IMessageBus.InvokeAsync;
 // a GameRuleException comes back to the page as the message to show.
+/// <summary>The create-game page: details plus who's added and invited, saved in one transaction.</summary>
+public sealed record CreateGame(
+    Guid GameId, GameFormat Format, DateTime StartsAtLocal, DateTime EndsAtLocal, string Location, Guid[] Add, Guid[] Invite);
 public sealed record ScheduleGame(Guid GameId, GameFormat Format, DateTime StartsAtLocal, DateTime EndsAtLocal, string Location);
 public sealed record AddAndInvite(Guid GameId, Guid[] Add, Guid[] Invite);
 public sealed record ReinviteClosedPlayers(Guid GameId);
@@ -29,6 +32,29 @@ public static class GameCommandHandler
         session.Events.StartStream<Game>(cmd.GameId, decision.Events.ToArray());
 
         var messages = new OutgoingMessages();
+        messages.ScheduleAll(cmd.GameId, cmd.StartsAtLocal, times, work.Now);
+        return messages;
+    }
+
+    public static async Task<OutgoingMessages> Handle(CreateGame cmd, IDocumentSession session, GameWork work, CancellationToken ct)
+    {
+        var times = work.Clock.For(cmd.StartsAtLocal, cmd.EndsAtLocal);
+        var schedule = GameDecider.Schedule(cmd.GameId, cmd.Format, cmd.StartsAtLocal, cmd.EndsAtLocal, cmd.Location, work.Now, times);
+        var game = GameEvolver.From(schedule.Events);
+
+        // The roster is decided against the just-scheduled game, so "created already full"
+        // sends only "game on" (spec §5), exactly as a later AddAndInvite would.
+        var players = await work.LoadPlayersAsync(session, ct);
+        var roster = cmd.Add.Length + cmd.Invite.Length == 0
+            ? Decision.Nothing
+            : GameDecider.AddAndInvite(game, new GameContext(work.Now, times, players.OrganizerPlayerId),
+                cmd.Add, cmd.Invite, players.OptedIn, PageTokens.New);
+
+        session.Events.StartStream<Game>(cmd.GameId, schedule.Events.Concat(roster.Events).ToArray());
+
+        var after = game.Clone();
+        foreach (var e in roster.Events) GameEvolver.Apply(after, e);
+        OutgoingMessages messages = [.. work.Render(after, roster.Notices, players)];
         messages.ScheduleAll(cmd.GameId, cmd.StartsAtLocal, times, work.Now);
         return messages;
     }

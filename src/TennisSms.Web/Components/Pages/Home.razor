@@ -1,8 +1,63 @@
 ﻿@page "/"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@implements IDisposable
+@inject OrganizerQueries Queries
 
-<PageTitle>TennisSMS</PageTitle>
+<PageTitle>Games · TennisSMS</PageTitle>
 
-<h1>TennisSMS</h1>
+<main class="page">
+    <div class="heading">
+        <h1>Upcoming games</h1>
+        <a class="button primary" href="/games/new">New game</a>
+    </div>
 
-<p>The organizer pages (upcoming games, create game, game detail, players) come next.</p>
-<p><a href="/dev/simulator">Phone simulator</a> (development only)</p>
+    @if (_games is null)
+    {
+        <p class="muted">Loading…</p>
+    }
+    else if (_games.Count == 0)
+    {
+        <p class="muted">No upcoming games. <a href="/games/new">Create one.</a></p>
+    }
+    else
+    {
+        <table class="list">
+            <thead>
+                <tr><th>When</th><th>Format</th><th>Where</th><th>Players</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var g in _games)
+                {
+                    <tr class="@(g.IsClosedForChanges ? "dim" : "")">
+                        <td><a href="/games/@g.Id">@Ui.When(g)</a></td>
+                        <td>@g.Format</td>
+                        <td>@g.Location</td>
+                        <td>@g.ConfirmedCount / @g.Capacity</td>
+                        <td><span class="badge @Ui.StatusClass(g)">@Ui.Status(g)</span></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</main>
+
+@code {
+    private List<Game>? _games;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync() => _games = await Queries.UpcomingGamesAsync();
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // Replies arrive by text at any time; keep the list current.
+        if (firstRender)
+            _timer = new Timer(_ => InvokeAsync(async () =>
+            {
+                _games = await Queries.UpcomingGamesAsync();
+                StateHasChanged();
+            }), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

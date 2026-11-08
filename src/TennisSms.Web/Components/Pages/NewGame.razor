@@ -1,0 +1,94 @@
+@page "/games/new"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject OrganizerQueries Queries
+@inject IMessageBus Bus
+@inject NavigationManager Nav
+
+<PageTitle>New game · TennisSMS</PageTitle>
+
+<main class="page">
+    <h1>New game</h1>
+
+    <section class="card stack">
+        <div class="row">
+            <label>
+                Format
+                <select @bind="_format">
+                    <option value="@GameFormat.Doubles">Doubles (4)</option>
+                    <option value="@GameFormat.Singles">Singles (2)</option>
+                </select>
+            </label>
+            <label>Date <input type="date" @bind="_date" /></label>
+            <label>Start <input type="time" step="900" @bind="_start" @bind:after="KeepEndAfterStart" /></label>
+            <label>End <input type="time" step="900" @bind="_end" /></label>
+        </div>
+        <label>
+            Location
+            <input class="wide" @bind="_location" placeholder="e.g. Oak Park courts 3-4" />
+        </label>
+    </section>
+
+    <h2>Players</h2>
+    <p class="muted">
+        Invite players to text YES or NO, or add players who've already agreed. Only players who have texted JOIN appear here.
+    </p>
+    @if (_players is not null)
+    {
+        <RosterPicker Players="_players" Choices="_choices" Empty="No one has opted in yet. Players appear here after they text JOIN." />
+    }
+
+    @if (_error is not null)
+    {
+        <p class="error">@_error</p>
+    }
+    <div class="row actions">
+        <button class="primary" disabled="@_saving" @onclick="SaveAsync">Create game and send texts</button>
+        <a href="/">Cancel</a>
+    </div>
+</main>
+
+@code {
+    private GameFormat _format = GameFormat.Doubles;
+    private DateOnly _date;
+    private TimeOnly _start = new(18, 0);
+    private TimeOnly _end = new(19, 30);
+    private string _location = "";
+    private List<Player>? _players;
+    private readonly Dictionary<Guid, RosterChoice> _choices = [];
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _date = DateOnly.FromDateTime(Queries.NowLocal).AddDays(1);
+        _players = (await Queries.PlayersAsync()).Where(p => p.ConsentStatus == ConsentStatus.OptedIn).ToList();
+    }
+
+    private void KeepEndAfterStart()
+    {
+        if (_end <= _start) _end = _start.AddMinutes(90);
+    }
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+        _saving = true;
+        try
+        {
+            var id = Guid.NewGuid();
+            await Bus.InvokeAsync(new CreateGame(
+                id, _format, _date.ToDateTime(_start), _date.ToDateTime(_end), _location,
+                _choices.Add(), _choices.Invite()));
+            Nav.NavigateTo($"/games/{id}");
+        }
+        catch (GameRuleException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

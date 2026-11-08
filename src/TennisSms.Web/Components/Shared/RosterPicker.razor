@@ -1,0 +1,57 @@
+@* Choose, per player, whether to leave them out, invite them, or add them straight in as playing. *@
+
+@if (Players.Count == 0)
+{
+    <p class="muted">@Empty</p>
+}
+else
+{
+    <div class="row">
+        <button type="button" @onclick="InviteAll">Invite everyone</button>
+        <button type="button" @onclick="Clear">Clear</button>
+        <span class="muted">@Summary</span>
+    </div>
+    <table class="list compact">
+        <tbody>
+            @foreach (var p in Players)
+            {
+                var choice = Choices.GetValueOrDefault(p.Id);
+                <tr>
+                    <td>@p.Name</td>
+                    <td class="muted">@Ui.Phone(p.PhoneE164)</td>
+                    <td class="segmented">
+                        <button type="button" class="@(choice == RosterChoice.None ? "on" : "")" @onclick="() => Set(p.Id, RosterChoice.None)">—</button>
+                        <button type="button" class="@(choice == RosterChoice.Invite ? "on" : "")" @onclick="() => Set(p.Id, RosterChoice.Invite)">Invite</button>
+                        <button type="button" class="@(choice == RosterChoice.Add ? "on" : "")" @onclick="() => Set(p.Id, RosterChoice.Add)" title="Already agreed to play: add as confirmed">Playing</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<Player> Players { get; set; } = [];
+    [Parameter, EditorRequired] public Dictionary<Guid, RosterChoice> Choices { get; set; } = [];
+    [Parameter] public string Empty { get; set; } = "No opted-in players.";
+
+    private string Summary
+    {
+        get
+        {
+            var invite = Choices.Count(c => c.Value == RosterChoice.Invite);
+            var add = Choices.Count(c => c.Value == RosterChoice.Add);
+            return $"{add} playing, {invite} to invite";
+        }
+    }
+
+    private void Set(Guid id, RosterChoice choice) => Choices[id] = choice;
+
+    private void InviteAll()
+    {
+        foreach (var p in Players.Where(p => Choices.GetValueOrDefault(p.Id) == RosterChoice.None))
+            Choices[p.Id] = RosterChoice.Invite;
+    }
+
+    private void Clear() => Choices.Clear();
+}

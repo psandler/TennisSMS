@@ -1,0 +1,117 @@
+@page "/g/{Token}"
+@layout Layout.PlayerLayout
+@inject OrganizerQueries Queries
+@inject IMessageBus Bus
+@inject NavigationManager Nav
+
+@* The player's game page (spec §7). Static server rendering: plain HTML forms, works on any phone.
+   Possession of the link is the identity; no login. *@
+
+@if (_page is { } p)
+{
+    var g = p.Game;
+    <PageTitle>Tennis @Ui.When(g)</PageTitle>
+
+    <h1>@Ui.When(g)</h1>
+    <p class="where">@g.Format at @g.Location</p>
+
+    @if (Message(Result) is { } message)
+    {
+        <p class="result">@message</p>
+    }
+
+    @if (p.ReadOnlyReason is not null)
+    {
+        <p class="state closed">@p.ReadOnlyReason</p>
+    }
+    else
+    {
+        <p class="state">Hi @p.PlayerName. @StatusText(p)</p>
+
+        @if (p.Status == ParticipationStatus.Invited && g.Status == GameStatus.Open)
+        {
+            <form method="post" @formname="reply" @onsubmit="ReplyAsync" class="actions">
+                <AntiforgeryToken />
+                <button name="Reply" value="@GameReply.Yes" class="yes">Yes, I'm in</button>
+                <button name="Reply" value="@GameReply.No" class="no">No, can't make it</button>
+            </form>
+        }
+        else if (p.Status == ParticipationStatus.Confirmed)
+        {
+            <form method="post" @formname="reply" @onsubmit="ReplyAsync" class="actions">
+                <AntiforgeryToken />
+                <button name="Reply" value="@GameReply.Out" class="no">I can't make it after all</button>
+            </form>
+        }
+    }
+
+    <h2>Playing (@p.Confirmed.Count of @g.Capacity)</h2>
+    @if (p.Confirmed.Count == 0)
+    {
+        <p class="muted">No one yet.</p>
+    }
+    else
+    {
+        <ul>@foreach (var name in p.Confirmed) { <li>@name</li> }</ul>
+    }
+    @if (g.OpenSpots > 0 && !g.IsClosedForChanges)
+    {
+        <p>@g.OpenSpots @(g.OpenSpots == 1 ? "spot" : "spots") open.</p>
+    }
+
+    @if (p.Invited.Count > 0 && !g.IsClosedForChanges)
+    {
+        <h2>Invited</h2>
+        <ul>@foreach (var name in p.Invited) { <li>@name</li> }</ul>
+    }
+}
+
+@code {
+    [Parameter] public string Token { get; set; } = "";
+    [SupplyParameterFromForm(FormName = "reply")] private GameReply? Reply { get; set; }
+    [SupplyParameterFromQuery] private string? Result { get; set; }
+
+    private PlayerGamePage? _page;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _page = await Queries.PlayerPageAsync(Token);
+        if (_page is null) Nav.NotFound();
+    }
+
+    private async Task ReplyAsync()
+    {
+        if (_page is not { CanAct: true } p || Reply is not { } reply) return;
+        var result = await Bus.InvokeAsync<GameReplyResult>(new ReplyToGame(p.Game.Id, p.PlayerId, reply, Channel.Page));
+        // Post/redirect/get: a refresh doesn't send the reply again.
+        Nav.NavigateTo($"/g/{Token}?result={result.Outcome}");
+    }
+
+    private static string StatusText(PlayerGamePage p) => p.Status switch
+    {
+        ParticipationStatus.Invited => p.Game.Status == GameStatus.Open ? "You're invited. Can you play?" : "The game is full.",
+        ParticipationStatus.Confirmed => "You're playing.",
+        ParticipationStatus.Declined => "You said you can't make it.",
+        ParticipationStatus.Closed => "This invitation is closed. The organizer can invite you again if a spot opens.",
+        ParticipationStatus.Dropped => "You dropped out.",
+        ParticipationStatus.Removed => "You're no longer in this game.",
+        _ => "",
+    };
+
+    private static string? Message(string? result) => Enum.TryParse<ReplyOutcome>(result, out var outcome)
+        ? outcome switch
+        {
+            ReplyOutcome.Accepted => "You're in!",
+            ReplyOutcome.AcceptedAndFilled => "You're in, and that fills the game. Game on!",
+            ReplyOutcome.Declined => "Got it, thanks.",
+            ReplyOutcome.Dropped => "You're out. The organizer has been told.",
+            ReplyOutcome.GameFull => "Sorry, the game is already full.",
+            ReplyOutcome.NotInvited => "You don't have an open invitation for this game.",
+            ReplyOutcome.AlreadyIn => "You're already in.",
+            ReplyOutcome.NotInGame => "You're not in this game.",
+            ReplyOutcome.GameCancelled => "This game was cancelled.",
+            ReplyOutcome.GameStarted => "This game has already started.",
+            _ => null,
+        }
+        : null;
+}

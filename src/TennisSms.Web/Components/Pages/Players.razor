@@ -1,0 +1,165 @@
+@page "/players"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using Microsoft.Extensions.Options
+@using TennisSms.Web.Inbound
+@using TennisSms.Web.Infrastructure
+@using TennisSms.Web.Players
+@inject OrganizerQueries Queries
+@inject IMessageBus Bus
+@inject IOptions<TennisSmsOptions> Options
+
+<PageTitle>Players · TennisSMS</PageTitle>
+
+<main class="page">
+    <h1>Players</h1>
+    <p class="muted">
+        Add a player's name and mobile number, then ask them to text <strong>JOIN</strong> to @Ui.Phone(Options.Value.ServiceNumber).
+        They can only be invited once they have. Names appear in texts, so keep them short (up to @PlayerRules.MaxNameLength characters).
+    </p>
+
+    <section class="card">
+        <div class="row">
+            <label>Name <input @ref="_nameInput" @bind="_newName" maxlength="@PlayerRules.MaxNameLength" placeholder="Mike R" /></label>
+            <label>Mobile number <input type="tel" @bind="_newPhone" placeholder="(312) 555-0123" /></label>
+            <button class="primary" disabled="@_busy" @onclick="AddAsync">Add player</button>
+        </div>
+        @if (_addError is not null) { <p class="error">@_addError</p> }
+    </section>
+
+    @if (_players is { Count: > 0 })
+    {
+        <table class="list">
+            <thead><tr><th>Name</th><th>Mobile</th><th>Texts</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var p in _players)
+                {
+                    @if (_editing == p.Id)
+                    {
+                        <tr>
+                            <td><input @bind="_editName" maxlength="@PlayerRules.MaxNameLength" /></td>
+                            <td><input type="tel" @bind="_editPhone" /></td>
+                            <td><span class="badge @p.ConsentStatus.ToString().ToLowerInvariant()">@Consent(p.ConsentStatus)</span></td>
+                            <td class="nowrap">
+                                <button class="primary" disabled="@_busy" @onclick="SaveEditAsync">Save</button>
+                                <button @onclick="() => _editing = null">Cancel</button>
+                                @if (_editError is not null) { <div class="error">@_editError</div> }
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        <tr>
+                            <td>@p.Name</td>
+                            <td>@Ui.Phone(p.PhoneE164)</td>
+                            <td><span class="badge @p.ConsentStatus.ToString().ToLowerInvariant()">@Consent(p.ConsentStatus)</span></td>
+                            <td><button class="link" @onclick="() => StartEdit(p)">edit</button></td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    }
+    else if (_players is not null)
+    {
+        <p class="muted">No players yet.</p>
+    }
+
+    <h2>Unknown numbers</h2>
+    <p class="muted">Texts from numbers that aren't players. They get at most one reply. Add one as a player if it's someone you know.</p>
+    @if (_unknown is { Count: > 0 })
+    {
+        <table class="list">
+            <thead><tr><th>Number</th><th>Last text</th><th>Texts</th><th>Last seen</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var u in _unknown)
+                {
+                    <tr>
+                        <td class="nowrap">@Ui.Phone(u.Id)</td>
+                        <td>@u.LastBody</td>
+                        <td>@u.MessageCount</td>
+                        <td class="nowrap">@Queries.ToLocal(u.LastSeenAt).ToString("ddd M/d h:mm tt")</td>
+                        <td><button class="link" @onclick="() => AddUnknownAsync(u)">add as player</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <p class="muted">None.</p>
+    }
+</main>
+
+@code {
+    private List<Player>? _players;
+    private List<UnknownSender>? _unknown;
+    private string _newName = "", _newPhone = "";
+    private string? _addError;
+    private Guid? _editing;
+    private string _editName = "", _editPhone = "";
+    private string? _editError;
+    private bool _busy;
+    private ElementReference _nameInput;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _players = await Queries.PlayersAsync();
+        _unknown = await Queries.UnknownSendersAsync();
+    }
+
+    private static string Consent(ConsentStatus status) => status switch
+    {
+        ConsentStatus.OptedIn => "Joined",
+        ConsentStatus.Pending => "Hasn't texted JOIN",
+        ConsentStatus.OptedOut => "Opted out (STOP)",
+        _ => status.ToString(),
+    };
+
+    private async Task AddAsync()
+    {
+        _addError = null;
+        _busy = true;
+        try
+        {
+            await Bus.InvokeAsync(new RegisterPlayer(Guid.NewGuid(), _newName, _newPhone));
+            _newName = _newPhone = "";
+            await LoadAsync();
+        }
+        catch (PlayerRuleException ex) { _addError = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task AddUnknownAsync(UnknownSender sender)
+    {
+        _newPhone = Ui.Phone(sender.Id);
+        _newName = "";
+        _addError = "Type their name, then Add player.";
+        await _nameInput.FocusAsync();
+    }
+
+    private void StartEdit(Player p)
+    {
+        _editing = p.Id;
+        _editName = p.Name;
+        _editPhone = Ui.Phone(p.PhoneE164);
+        _editError = null;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (_editing is not { } id) return;
+        _editError = null;
+        _busy = true;
+        try
+        {
+            await Bus.InvokeAsync(new ChangePlayerDetails(id, _editName, _editPhone));
+            _editing = null;
+            await LoadAsync();
+        }
+        catch (PlayerRuleException ex) { _editError = ex.Message; }
+        finally { _busy = false; }
+    }
+}

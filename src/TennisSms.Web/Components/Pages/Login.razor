@@ -1,0 +1,100 @@
+@page "/login"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using Microsoft.Extensions.Options
+@using TennisSms.Web.Auth
+@using TennisSms.Web.Infrastructure
+@inject IMessageBus Bus
+@inject NavigationManager Nav
+@inject IOptions<TennisSmsOptions> Options
+@inject IWebHostEnvironment Env
+
+@* Static server rendering: signing in sets a cookie, which needs a real HTTP response. *@
+
+<PageTitle>Log in</PageTitle>
+
+<main class="page narrow">
+    <h1>Organizer login</h1>
+
+    <form method="post" @formname="login" @onsubmit="SubmitAsync" class="stack">
+        <AntiforgeryToken />
+        @if (_askForCode)
+        {
+            <p>If that's the organizer's number, a 6-digit code is on its way by text. It works for 10 minutes.</p>
+            <input type="hidden" name="Stage" value="code" />
+            <input type="hidden" name="PhoneInput" value="@PhoneInput" />
+            <label>
+                Code
+                <input name="CodeInput" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required autofocus />
+            </label>
+            <div class="row">
+                <button type="submit" class="primary">Log in</button>
+                <a href="@Nav.GetUriWithQueryParameter("ReturnUrl", ReturnUrl)">Use a different number</a>
+            </div>
+        }
+        else
+        {
+            <input type="hidden" name="Stage" value="phone" />
+            <label>
+                Your phone number
+                <input name="PhoneInput" value="@PhoneInput" type="tel" inputmode="tel" autocomplete="tel" required autofocus />
+            </label>
+            <div class="row"><button type="submit" class="primary">Text me a code</button></div>
+        }
+    </form>
+
+    @if (_error is not null)
+    {
+        <p class="error">@_error</p>
+    }
+
+    @if (Env.IsDevelopment())
+    {
+        <p class="muted">
+            Development: the organizer's number is @Ui.Phone(Options.Value.Organizer.PhoneE164), and the code shows up
+            on the organizer phone in the <a href="/dev/simulator" target="_blank">simulator</a>.
+        </p>
+    }
+</main>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm] private string? Stage { get; set; }
+    [SupplyParameterFromForm] private string? PhoneInput { get; set; }
+    [SupplyParameterFromForm] private string? CodeInput { get; set; }
+    [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+
+    private bool _askForCode;
+    private string? _error;
+
+    private async Task SubmitAsync()
+    {
+        if (Stage == "code")
+        {
+            var result = await Bus.InvokeAsync<LoginCodeResult>(new VerifyLoginCode(PhoneInput ?? "", CodeInput ?? ""));
+            if (!result.Ok)
+            {
+                _error = result.Error;
+                _askForCode = result.Error == "That code isn't right.";
+                return;
+            }
+
+            var identity = new ClaimsIdentity(
+                [new Claim(ClaimTypes.Name, Options.Value.Organizer.Name), new Claim(ClaimTypes.Role, "Organizer")],
+                CookieAuthenticationDefaults.AuthenticationScheme);
+            await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity),
+                new AuthenticationProperties { IsPersistent = true });
+            Nav.NavigateTo(SafeReturnUrl(ReturnUrl));
+            return;
+        }
+
+        await Bus.InvokeAsync(new RequestLoginCode(PhoneInput ?? ""));
+        _askForCode = true;
+    }
+
+    /// <summary>Only local paths: never redirect off-site after login.</summary>
+    private static string SafeReturnUrl(string? url) =>
+        !string.IsNullOrEmpty(url) && url.StartsWith('/') && !url.StartsWith("//") && !url.StartsWith("/\\") ? url : "/";
+}
