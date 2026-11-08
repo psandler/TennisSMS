@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TennisSms.Core/TennisSms.Core.csproj" />
+    <Project Path="src/TennisSms.Web/TennisSms.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TennisSms.Core.Tests/TennisSms.Core.Tests.csproj" />
+    <Project Path="tests/TennisSms.IntegrationTests/TennisSms.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

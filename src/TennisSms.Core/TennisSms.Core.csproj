@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    Core holds the domain: events, aggregates, decisions, parser, templates, time rules.
+    No database or Wolverine references. JasperFx.Events plus its source generator are here
+    only because Polecat requires the generator in every assembly that defines aggregates.
+  -->
+  <ItemGroup>
+    <PackageReference Include="JasperFx.Events" Version="2.100.1" />
+    <PackageReference Include="JasperFx.Events.SourceGenerator" Version="2.100.1"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TennisSms.Core.Tests" />
+  </ItemGroup>
+
+</Project>
