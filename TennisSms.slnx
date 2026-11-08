@@ -3,6 +3,7 @@
     <File Path="CLAUDE.md" />
     <File Path="docs/overview.md" />
     <File Path="docs/spec.md" />
+    <File Path="README.md" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/TennisSms.Core/TennisSms.Core.csproj" />

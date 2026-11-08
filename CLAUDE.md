@@ -15,19 +15,19 @@ Tennis Game Scheduler: an SMS-first service that fills tennis games (singles/dou
 - `docs/overview.md`: plain-language description of how the service works.
 - `docs/spec.md`: technical spec (v0.1 / MVP draft, under review).
 
-Status: building v0.1. Skeleton, core domain logic, wiring (handlers, inbound pipeline, outbox, simulator gateway, timers), and the phone simulator exist; the organizer pages and the player game page (`/g/{token}`) are next. Don't change the docs unless asked.
+Status: building v0.1. All v0.1 pieces exist: core domain logic, wiring (handlers, inbound pipeline, outbox, simulator gateway, timers), the phone simulator, organizer login and pages, and the player game page (`/g/{token}`). Twilio (spec §13) is not started. Don't change the docs unless asked.
 
 ## Layout
 
 - `src/TennisSms.Core`: domain only. Events, `Game`/`Player` aggregates, `GameDecider` (pure decisions: state + command → events + notices), reply parser, message templates (`MessageComposer`, GSM-7 checks), `GameClock` (local time → UTC). No database or Wolverine references; JasperFx.Events is there only for Polecat's aggregate source generator.
-- `src/TennisSms.Web`: the single app. Polecat/Wolverine setup (`Infrastructure/Storage.cs`, `AppServices.cs`), `Sms/` (gateway abstraction, simulator gateway, `SendSms` outbox handler, `MessageLog`), `Games/` and `Players/` (commands and handlers; `GameWork` locks a game, applies a decision, renders texts), `Inbound/` (the inbound pipeline and reply resolver), `Simulator/` (fake phones, auto-replies, scenarios; registered only with the Simulator gateway), Blazor pages. Blazor talks to handlers in-process via Wolverine, not over HTTP. Wolverine only discovers handler classes whose names end in `Handler`.
+- `src/TennisSms.Web`: the single app. Polecat/Wolverine setup (`Infrastructure/Storage.cs`, `AppServices.cs`), `Sms/` (gateway abstraction, simulator gateway, `SendSms` outbox handler, `MessageLog`), `Games/` and `Players/` (commands and handlers; `GameWork` locks a game, applies a decision, renders texts), `Inbound/` (the inbound pipeline and reply resolver), `Simulator/` (fake phones, auto-replies, scenarios; registered only with the Simulator gateway), `Auth/` (SMS login codes), `Organizer/` (page queries), Blazor pages (organizer pages are interactive server and `[Authorize]`; `/login` and `/g/{token}` are static SSR). Blazor talks to handlers in-process via Wolverine, not over HTTP. Wolverine only discovers handler classes whose names end in `Handler`.
 - `tests/TennisSms.Core.Tests`: fast unit tests. `tests/TennisSms.IntegrationTests`: against SQL Server 2025 (`TennisSms_Tests` on localhost, override with `TENNISSMS_TEST_DB`).
 - Local dev database: `TennisSms` on the default local SQL Server 2025 instance, Windows auth. Created on startup in Development.
 
 ## Commands
 
 - Build and test everything: `dotnet test TennisSms.slnx`
-- Run the app: `dotnet run --project src/TennisSms.Web` (http://localhost:5234; phone simulator at `/dev/simulator`, Development only). The simulator's Reset wipes the dev database.
+- Run the app: `dotnet run --project src/TennisSms.Web` (http://localhost:5234; phone simulator at `/dev/simulator`, Development only). The simulator's Reset wipes the dev database. To log in, enter the organizer number from config (dev: 555-010-0001); the code appears on the organizer phone in the simulator.
 
 ## Planned stack (from spec, subject to revision)
 
