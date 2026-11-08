@@ -62,3 +62,6 @@ public sealed record GameStarted;
 public sealed record ReminderIssued;
 
 public sealed record CancellationWindowAlertIssued;
+
+/// <summary>Idempotency marker: the organizer was told the game can't fill with the people asked (E-6).</summary>
+public sealed record ShortfallAlertIssued(int Shortfall);

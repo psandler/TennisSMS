@@ -33,9 +33,11 @@ public enum NoticeKind
     OrganizerPlayerDropped,
     OrganizerGameFilled,
     OrganizerNotFullAlert,
+    OrganizerShortfall,
 }
 
-public sealed record Notice(NoticeKind Kind, Recipient To, Guid? AboutPlayerId = null, bool WithinCancellationWindow = false);
+/// <param name="Shortfall">For organizer texts: how many more to invite (E-6), or 0.</param>
+public sealed record Notice(NoticeKind Kind, Recipient To, Guid? AboutPlayerId = null, bool WithinCancellationWindow = false, int Shortfall = 0);
 
 /// <summary>How a player's reply turned out. Recorded on the inbound MessageLog entry.</summary>
 public enum ReplyOutcome

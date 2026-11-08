@@ -10,23 +10,23 @@ public enum AutoReplyMode { Manual, AlwaysYes, AlwaysNo, YesThenOut, Random, Sil
 
 public static class SimulatorPhones
 {
-    /// <summary>The 8 seeded players. Numbers are in the 555-01xx fictional range.</summary>
+    /// <summary>The 7 seeded players. Numbers are in the 555-01xx fictional range.</summary>
     public static readonly IReadOnlyList<SimPhone> Players =
     [
-        new("+15550100011", "Mike", SimPhoneKind.Player),
-        new("+15550100012", "Dave", SimPhoneKind.Player),
-        new("+15550100013", "Sam", SimPhoneKind.Player),
-        new("+15550100014", "Lee", SimPhoneKind.Player),
-        new("+15550100015", "Kim", SimPhoneKind.Player),
-        new("+15550100016", "Raj", SimPhoneKind.Player),
-        new("+15550100017", "Ana", SimPhoneKind.Player),
-        new("+15550100018", "Tom", SimPhoneKind.Player),
+        new("+15550100011", "Hyo", SimPhoneKind.Player),
+        new("+15550100012", "Jim", SimPhoneKind.Player),
+        new("+15550100013", "Michael", SimPhoneKind.Player),
+        new("+15550100014", "Mike", SimPhoneKind.Player),
+        new("+15550100015", "Ben", SimPhoneKind.Player),
+        new("+15550100016", "Nick", SimPhoneKind.Player),
+        new("+15550100017", "Jed", SimPhoneKind.Player),
     ];
 
     public static readonly SimPhone Unknown = new("+15550100099", "Unknown number", SimPhoneKind.Unknown);
 
+    /// <summary>Organizer first (top left on the page), then the players, then the unknown number.</summary>
     public static IReadOnlyList<SimPhone> All(string organizerPhone, string organizerName) =>
-        [.. Players, new SimPhone(organizerPhone, $"{organizerName} (organizer)", SimPhoneKind.Organizer), Unknown];
+        [new SimPhone(organizerPhone, $"{organizerName} (organizer)", SimPhoneKind.Organizer), .. Players, Unknown];
 
     public static SimPhone Player(string name) => Players.Single(p => p.Name == name);
 

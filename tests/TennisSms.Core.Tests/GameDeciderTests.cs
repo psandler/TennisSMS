@@ -121,7 +121,9 @@ public class DeclineAndDropTests
     [Fact]
     public void Decline_records_and_acknowledges()
     {
-        var d = GameDecider.Decline(Doubles(Invited(Mike)), Ctx(), Mike, Channel.Page);
+        // Enough people still asked to fill it, so no can't-fill alert.
+        var game = Doubles(Added(Phil), Added(Dave), Invited(Mike), Invited(Sam), Invited(Lee));
+        var d = GameDecider.Decline(game, Ctx(), Mike, Channel.Page);
         Assert.Equal(new InvitationDeclined(Mike, Channel.Page, null), Assert.Single(d.Events));
         Assert.Equal(NoticeKind.Declined, Assert.Single(d.Notices).Kind);
     }
@@ -148,14 +150,14 @@ public class DeclineAndDropTests
     {
         var d = GameDecider.Drop(Doubles(Added(Mike)), Ctx(Tuesday), Mike, Channel.Sms);
         Assert.False(((PlayerDropped)d.Events[0]).WithinCancellationWindow);
-        Assert.Single(d.Events); // not full, so no SpotReopened
+        Assert.DoesNotContain(d.Events, e => e is SpotReopened); // not full
     }
 
     [Fact]
     public void Out_from_an_invited_player_counts_as_no()
     {
         var d = GameDecider.Drop(Doubles(Invited(Mike)), Ctx(), Mike, Channel.Sms);
-        Assert.IsType<InvitationDeclined>(Assert.Single(d.Events));
+        Assert.IsType<InvitationDeclined>(d.Events[0]);
     }
 
     [Fact]
@@ -343,7 +345,8 @@ public class TimerAndConsentTests
     [Fact]
     public void Stop_closes_an_invitation_quietly()
     {
-        var d = GameDecider.PlayerOptedOut(Doubles(Invited(Mike)), Ctx(), Mike);
+        // Enough others still invited, so no can't-fill alert either.
+        var d = GameDecider.PlayerOptedOut(Doubles(Invited(Mike), Invited(Dave), Invited(Sam), Invited(Lee), Invited(Kim)), Ctx(), Mike);
         Assert.Equal(new InvitationClosed(Mike, CloseReason.OptedOut), Assert.Single(d.Events));
         Assert.Empty(d.Notices);
     }
@@ -356,5 +359,82 @@ public class TimerAndConsentTests
         Assert.Equal(new PlayerDropped(Mike, Channel.Sms, false, DropReason.OptedOut), d.Events[0]);
         Assert.IsType<SpotReopened>(d.Events[1]);
         Assert.True(Assert.Single(d.Notices).To.IsOrganizer); // nothing to the player
+    }
+}
+
+/// <summary>Can't-fill alert (enhancements E-6).</summary>
+public class ShortfallTests
+{
+    private static InvitationAccepted Yes(Guid id) => new(id, Channel.Sms, null, Tuesday);
+
+    /// <summary>Four invited to doubles; two said yes.</summary>
+    private static Game TwoInTwoWaiting() =>
+        Doubles(Invited(Mike), Invited(Dave), Invited(Sam), Invited(Lee), Yes(Mike), Yes(Dave));
+
+    [Fact]
+    public void Two_yes_one_no_one_waiting_tells_the_organizer_to_invite_one_more()
+    {
+        var game = TwoInTwoWaiting();
+        Assert.Equal(0, game.Shortfall);
+
+        var d = GameDecider.Decline(game, Ctx(), Sam, Channel.Sms);
+
+        Assert.Contains(new ShortfallAlertIssued(1), d.Events);
+        AcceptTests.AssertOneTextPerRecipient(d);
+        Assert.Equal(NoticeKind.Declined, AcceptTests.KindFor(d, Sam));
+        var alert = d.Notices.Single(n => n.To.IsOrganizer);
+        Assert.Equal((NoticeKind.OrganizerShortfall, 1), (alert.Kind, alert.Shortfall));
+    }
+
+    [Fact]
+    public void The_alert_is_sent_once_until_the_organizer_invites_enough_again()
+    {
+        var game = TwoInTwoWaiting();
+        game = After(game, GameDecider.Decline(game, Ctx(), Sam, Channel.Sms));
+
+        var second = GameDecider.Decline(game, Ctx(), Lee, Channel.Sms);
+        Assert.DoesNotContain(second.Events, e => e is ShortfallAlertIssued);
+        Assert.DoesNotContain(second.Notices, n => n.To.IsOrganizer);
+        game = After(game, second);
+        Assert.Equal(2, game.Shortfall);
+
+        // The organizer invites two more, which covers it; when one of them says no, it's short again.
+        game = After(game, GameDecider.AddAndInvite(game, Ctx(), [], [Kim, Id(7)], AllOptedIn, NewToken));
+        Assert.Equal((0, false), (game.Shortfall, game.ShortfallAlertSent));
+
+        var third = GameDecider.Decline(game, Ctx(), Kim, Channel.Sms);
+        Assert.Contains(new ShortfallAlertIssued(1), third.Events);
+    }
+
+    [Fact]
+    public void A_drop_that_leaves_a_shortfall_sends_one_combined_organizer_text()
+    {
+        var game = Doubles(Added(Phil), Added(Mike), Added(Dave), Invited(Sam));
+
+        var d = GameDecider.Drop(game, Ctx(InsideWindow), Mike, Channel.Sms);
+
+        var alert = Assert.Single(d.Notices, n => n.To.IsOrganizer);
+        Assert.Equal((NoticeKind.OrganizerPlayerDropped, Mike, 1), (alert.Kind, alert.AboutPlayerId, alert.Shortfall));
+        Assert.Contains(new ShortfallAlertIssued(1), d.Events); // 2 in, 1 waiting
+    }
+
+    [Fact]
+    public void Stop_closing_an_invitation_can_cause_the_alert()
+    {
+        var game = Doubles(Added(Mike), Added(Dave), Added(Sam), Invited(Lee));
+        var d = GameDecider.PlayerOptedOut(game, Ctx(), Lee);
+        Assert.Equal(NoticeKind.OrganizerShortfall, Assert.Single(d.Notices).Kind);
+    }
+
+    [Fact]
+    public void The_organizers_own_changes_and_full_games_never_alert()
+    {
+        var game = TwoInTwoWaiting();
+        var removed = GameDecider.Remove(game, Ctx(), Sam);
+        Assert.DoesNotContain(removed.Events, e => e is ShortfallAlertIssued);
+        Assert.Equal(1, After(game, removed).Shortfall); // the game page shows it
+
+        var full = Doubles(Added(Phil), Added(Mike), Added(Dave), Added(Sam), new GameFilled(Tuesday), Invited(Lee));
+        Assert.Equal(0, full.Shortfall);
     }
 }

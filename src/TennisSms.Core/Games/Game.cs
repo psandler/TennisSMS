@@ -17,9 +17,17 @@ public sealed partial class Game
     public DateTimeOffset? FilledAt { get; set; }
     public bool ReminderSent { get; set; }
     public bool NotFullAlertSent { get; set; }
+    public bool ShortfallAlertSent { get; set; }
 
     public int ConfirmedCount => Participants.Count(p => p.Status == ParticipationStatus.Confirmed);
     public int OpenSpots => Capacity - ConfirmedCount;
+    public int InvitedCount => Participants.Count(p => p.Status == ParticipationStatus.Invited);
+
+    /// <summary>
+    /// How many more people must be invited before the game can fill: spots that even a YES from
+    /// everyone still waiting can't cover. Zero unless the game is open.
+    /// </summary>
+    public int Shortfall => Status == GameStatus.Open ? Math.Max(0, OpenSpots - InvitedCount) : 0;
     public bool IsClosedForChanges => Status is GameStatus.Cancelled or GameStatus.Started;
 
     public Participant? Find(Guid playerId) => Participants.FirstOrDefault(p => p.PlayerId == playerId);
@@ -65,6 +73,7 @@ public sealed partial class Game
         p.Status = ParticipationStatus.Confirmed;
         p.CloseReason = null;
         p.ConfirmedAt = e.At;
+        RearmShortfallAlert();
     }
 
     public void Apply(PlayerInvited e)
@@ -72,6 +81,7 @@ public sealed partial class Game
         var p = GetOrAdd(e.PlayerId, e.PageToken);
         p.Status = ParticipationStatus.Invited;
         p.CloseReason = null;
+        RearmShortfallAlert();
     }
 
     public void Apply(InvitationAccepted e)
@@ -87,6 +97,7 @@ public sealed partial class Game
     {
         Status = GameStatus.Full;
         FilledAt = e.At;
+        RearmShortfallAlert();
     }
 
     public void Apply(InvitationClosed e)
@@ -113,6 +124,14 @@ public sealed partial class Game
     public void Apply(ReminderIssued e) => ReminderSent = true;
 
     public void Apply(CancellationWindowAlertIssued e) => NotFullAlertSent = true;
+
+    public void Apply(ShortfallAlertIssued e) => ShortfallAlertSent = true;
+
+    /// <summary>Once the shortfall is covered again, a later shortfall gets its own alert.</summary>
+    private void RearmShortfallAlert()
+    {
+        if (Shortfall == 0) ShortfallAlertSent = false;
+    }
 
     private Participant GetOrAdd(Guid playerId, string pageToken)
     {

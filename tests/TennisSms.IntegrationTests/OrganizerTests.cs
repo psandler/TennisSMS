@@ -1,10 +1,14 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
+using Polecat;
+using Polecat.Linq;
 using TennisSms.Core.Games;
+using TennisSms.Core.Players;
 using TennisSms.Core.Time;
 using TennisSms.Web.Auth;
 using TennisSms.Web.Games;
 using TennisSms.Web.Organizer;
+using TennisSms.Web.Players;
 using Wolverine;
 using Wolverine.Tracking;
 using static TennisSms.IntegrationTests.AppHostFixture;
@@ -75,6 +79,50 @@ public class LoginCodeTests(AppHostFixture app)
 }
 
 [Collection(AppCollection.Name)]
+public class OrganizerSetupTests(AppHostFixture app)
+{
+    private async Task<IReadOnlyList<Player>> OrganizerPlayersAsync()
+    {
+        await using var session = app.Store.QuerySession();
+        return await session.Query<Player>().Where(p => p.PhoneE164 == OrganizerPhone).ToListAsync();
+    }
+
+    [Fact]
+    public async Task The_organizer_is_an_opted_in_player_with_the_role_and_setup_is_idempotent()
+    {
+        await app.Host.InvokeMessageAndWaitAsync(new EnsureOrganizerPlayer());
+        var phil = Assert.Single(await OrganizerPlayersAsync());
+        Assert.Equal(("Phil", ConsentStatus.OptedIn, true), (phil.Name, phil.ConsentStatus, phil.IsOrganizer));
+
+        await using var session = app.Store.QuerySession();
+        var before = (await session.Events.FetchStreamAsync(phil.Id)).Count;
+        await app.Host.InvokeMessageAndWaitAsync(new EnsureOrganizerPlayer());
+        Assert.Equal(before, (await session.Events.FetchStreamAsync(phil.Id)).Count);
+        Assert.Single(await OrganizerPlayersAsync());
+    }
+
+    [Fact]
+    public async Task The_organizer_can_play_and_gets_only_organizer_texts()
+    {
+        await app.Host.InvokeMessageAndWaitAsync(new EnsureOrganizerPlayer());
+        var phil = Assert.Single(await OrganizerPlayersAsync());
+        var (mike, mikePhone) = await app.JoinedPlayerAsync("Mike");
+        var id = Guid.NewGuid();
+        var start = app.Services.GetRequiredService<GameClock>().ToLocal(DateTimeOffset.UtcNow).Date.AddDays(4).AddHours(18);
+        var before = app.TextsTo(OrganizerPhone).Count;
+
+        await app.Host.InvokeMessageAndWaitAsync(
+            new CreateGame(id, GameFormat.Singles, start, start.AddHours(1), "Oak Park", [phil.Id], [mike]));
+        Assert.Empty(app.TextsTo(OrganizerPhone).Skip(before)); // not "Phil added you"
+
+        await app.TextAsync(mikePhone, "yes");
+        Assert.Equal(GameStatus.Full, (await app.LoadAsync<Game>(id))!.Status);
+        var toPhil = Assert.Single(app.TextsTo(OrganizerPhone).Skip(before));
+        Assert.Contains("is full", toPhil);
+    }
+}
+
+[Collection(AppCollection.Name)]
 public class OrganizerTests(AppHostFixture app)
 {
     private OrganizerQueries Queries => app.Services.GetRequiredService<OrganizerQueries>();
@@ -98,6 +146,28 @@ public class OrganizerTests(AppHostFixture app)
         Assert.StartsWith("Game on!", app.TextsTo(mikePhone).Last());
         Assert.StartsWith("Game on!", app.TextsTo(davePhone).Last());
         Assert.Equal(3, tracked.Scheduled.MessagesOf<IGameTimer>().Count());
+    }
+
+    [Fact]
+    public async Task Two_yes_one_no_one_waiting_texts_the_organizer_that_it_cant_fill()
+    {
+        var (mike, mikePhone) = await app.JoinedPlayerAsync("Mike");
+        var (dave, davePhone) = await app.JoinedPlayerAsync("Dave");
+        var (sam, samPhone) = await app.JoinedPlayerAsync("Sam");
+        var (lee, _) = await app.JoinedPlayerAsync("Lee");
+        var id = Guid.NewGuid();
+        var start = DaysAhead(4);
+        await app.Host.InvokeMessageAndWaitAsync(
+            new CreateGame(id, GameFormat.Doubles, start, start.AddHours(1), "Oak Park", [], [mike, dave, sam, lee]));
+        await app.TextAsync(mikePhone, "yes");
+        await app.TextAsync(davePhone, "yes");
+        var before = app.TextsTo(OrganizerPhone).Count;
+
+        await app.TextAsync(samPhone, "no");
+
+        var alert = Assert.Single(app.TextsTo(OrganizerPhone).Skip(before));
+        Assert.Contains("can't fill yet: 2 in, 1 waiting. Invite 1 more.", alert);
+        Assert.Equal(1, (await Queries.GameAsync(id))!.Game.Shortfall);
     }
 
     [Fact]

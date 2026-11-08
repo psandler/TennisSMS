@@ -168,7 +168,7 @@ public sealed class SimulatorEngine : IDisposable
 
     // ---------- Seed and reset ----------
 
-    /// <summary>Wipes all data (events, documents, pending Wolverine messages) and seeds the 8 players as Pending.</summary>
+    /// <summary>Wipes all data (events, documents, pending Wolverine messages) and seeds the 7 players as Pending, plus the organizer (opted in).</summary>
     public Task ResetAsync() => Exclusive(ResetCoreAsync);
 
     private async Task ResetCoreAsync()
@@ -184,8 +184,9 @@ public sealed class SimulatorEngine : IDisposable
 
         foreach (var phone in SimulatorPhones.Players)
             await InvokeAsync(new RegisterPlayer(Guid.NewGuid(), phone.Name, phone.Number));
+        await InvokeAsync(new EnsureOrganizerPlayer()); // as on app start
 
-        SetStatus("Reset: 8 players seeded (not joined yet).");
+        SetStatus("Reset: 7 players seeded (not joined yet), plus the organizer.");
     }
 
     /// <summary>Every seeded player texts JOIN.</summary>

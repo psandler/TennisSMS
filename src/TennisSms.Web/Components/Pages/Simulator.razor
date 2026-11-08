@@ -19,7 +19,7 @@ else
         <header class="sim-bar">
             <h1>Phone simulator</h1>
             <div class="sim-group">
-                <button @onclick="() => Do(_engine.ResetAsync)" disabled="@_engine.Busy" title="Wipe all data and seed 8 players (Pending)">Reset</button>
+                <button @onclick="() => Do(_engine.ResetAsync)" disabled="@_engine.Busy" title="Wipe all data and seed 7 players (Pending)">Reset</button>
                 <button @onclick="() => Do(_engine.JoinAllAsync)" disabled="@_engine.Busy" title="Every seeded player texts JOIN">JOIN all</button>
                 <button @onclick="() => Do(_engine.QuickGameAsync)" disabled="@_engine.Busy" title="Doubles ~20 hours out, everyone invited">Quick game</button>
                 <a href="/" target="_blank">Organizer pages ↗</a>

@@ -11,7 +11,7 @@ namespace TennisSms.IntegrationTests;
 
 /// <summary>
 /// The simulator's scenarios run headless as end-to-end tests (spec §14): each one resets the
-/// database, joins the 8 players, and plays its steps through the real pipeline.
+/// database, joins the 7 players, and plays its steps through the real pipeline.
 /// </summary>
 [Collection(AppCollection.Name)]
 public class SimulatorTests(AppHostFixture app)
@@ -43,9 +43,9 @@ public class SimulatorTests(AppHostFixture app)
         var game = Assert.Single(await GamesAsync());
         var p = await PlayersAsync();
         Assert.Equal(GameStatus.Full, game.Status);
-        Assert.All(new[] { "Raj", "Mike", "Sam", "Lee" }, n => Assert.Equal(ParticipationStatus.Confirmed, StatusOf(game, p[n])));
-        Assert.Equal(ParticipationStatus.Declined, StatusOf(game, p["Dave"]));
-        Assert.StartsWith("You're in. Game on!", app.TextsTo(SimulatorPhones.Player("Lee").Number).Last());
+        Assert.All(new[] { "Nick", "Hyo", "Michael", "Mike" }, n => Assert.Equal(ParticipationStatus.Confirmed, StatusOf(game, p[n])));
+        Assert.Equal(ParticipationStatus.Declined, StatusOf(game, p["Jim"]));
+        Assert.StartsWith("You're in. Game on!", app.TextsTo(SimulatorPhones.Player("Mike").Number).Last());
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public class SimulatorTests(AppHostFixture app)
         Assert.Equal(2, game.ConfirmedCount);
         Assert.Equal(
             [ParticipationStatus.Confirmed, ParticipationStatus.Closed],
-            new[] { StatusOf(game, p["Dave"]), StatusOf(game, p["Sam"]) }.Order());
+            new[] { StatusOf(game, p["Jim"]), StatusOf(game, p["Michael"]) }.Order());
     }
 
     [Fact]
@@ -70,9 +70,9 @@ public class SimulatorTests(AppHostFixture app)
         var game = Assert.Single(await GamesAsync());
         var p = await PlayersAsync();
         Assert.Equal(GameStatus.Full, game.Status);
-        Assert.Equal(ParticipationStatus.Dropped, StatusOf(game, p["Dave"]));
-        Assert.Equal(ParticipationStatus.Confirmed, StatusOf(game, p["Kim"]));
-        Assert.StartsWith("You're in. Game on!", app.TextsTo(SimulatorPhones.Player("Kim").Number).Last());
+        Assert.Equal(ParticipationStatus.Dropped, StatusOf(game, p["Jim"]));
+        Assert.Equal(ParticipationStatus.Confirmed, StatusOf(game, p["Ben"]));
+        Assert.StartsWith("You're in. Game on!", app.TextsTo(SimulatorPhones.Player("Ben").Number).Last());
     }
 
     [Fact]
@@ -81,10 +81,10 @@ public class SimulatorTests(AppHostFixture app)
         await RunAsync(Scenarios.TwoInvitations);
 
         var games = await GamesAsync();
-        var ana = (await PlayersAsync())["Ana"];
+        var ana = (await PlayersAsync())["Jed"];
         Assert.Equal(ParticipationStatus.Invited, StatusOf(games[0], ana));
         Assert.Equal(ParticipationStatus.Confirmed, StatusOf(games[1], ana));
-        Assert.Contains(app.TextsTo(SimulatorPhones.Player("Ana").Number), t => t.StartsWith("Which game? 1) "));
+        Assert.Contains(app.TextsTo(SimulatorPhones.Player("Jed").Number), t => t.StartsWith("Which game? 1) "));
     }
 
     [Fact]
@@ -93,11 +93,11 @@ public class SimulatorTests(AppHostFixture app)
         await RunAsync(Scenarios.StopMidGame);
 
         var games = await GamesAsync();
-        var tom = (await PlayersAsync())["Tom"];
+        var tom = (await PlayersAsync())["Mike"];
         Assert.Equal(ConsentStatus.OptedOut, tom.ConsentStatus);
         Assert.Equal(ParticipationStatus.Dropped, StatusOf(games[0], tom));
         Assert.Equal(ParticipationStatus.Closed, StatusOf(games[1], tom));
-        Assert.Equal(GeneralMessages.StopConfirmed("TennisSMS"), app.TextsTo(SimulatorPhones.Player("Tom").Number).Last());
+        Assert.Equal(GeneralMessages.StopConfirmed("TennisSMS"), app.TextsTo(SimulatorPhones.Player("Mike").Number).Last());
     }
 
     [Fact]
@@ -118,8 +118,8 @@ public class SimulatorTests(AppHostFixture app)
         Assert.True(await engine.WaitForAllJoinedAsync(TimeSpan.FromSeconds(30)));
 
         engine.MinDelay = engine.MaxDelay = TimeSpan.Zero;
-        engine.SetMode(SimulatorPhones.Player("Mike").Number, AutoReplyMode.AlwaysYes);
-        engine.SetMode(SimulatorPhones.Player("Dave").Number, AutoReplyMode.AlwaysNo);
+        engine.SetMode(SimulatorPhones.Player("Hyo").Number, AutoReplyMode.AlwaysYes);
+        engine.SetMode(SimulatorPhones.Player("Jim").Number, AutoReplyMode.AlwaysNo);
         engine.SetPaused(true);
         try
         {
@@ -134,9 +134,9 @@ public class SimulatorTests(AppHostFixture app)
 
             var game = Assert.Single(await GamesAsync());
             var p = await PlayersAsync();
-            Assert.Equal(ParticipationStatus.Confirmed, StatusOf(game, p["Mike"]));
-            Assert.Equal(ParticipationStatus.Declined, StatusOf(game, p["Dave"]));
-            Assert.Equal(ParticipationStatus.Invited, StatusOf(game, p["Sam"])); // Manual: no reply
+            Assert.Equal(ParticipationStatus.Confirmed, StatusOf(game, p["Hyo"]));
+            Assert.Equal(ParticipationStatus.Declined, StatusOf(game, p["Jim"]));
+            Assert.Equal(ParticipationStatus.Invited, StatusOf(game, p["Michael"])); // Manual: no reply
         }
         finally
         {
@@ -153,15 +153,16 @@ public class SimulatorTests(AppHostFixture app)
         await RunAsync(Scenarios.FillDoubles);
         var snapshot = await app.Services.GetRequiredService<SimulatorView>().LoadAsync();
 
-        Assert.Equal(10, snapshot.Phones.Count);
-        var lee = snapshot.Phones.Single(x => x.Phone.Name == "Lee");
-        Assert.Equal(ConsentStatus.OptedIn, lee.Consent);
-        Assert.Contains(lee.Thread, m => m.Outcome == "AcceptedAndFilled");
+        Assert.Equal(9, snapshot.Phones.Count);
+        Assert.Equal(SimPhoneKind.Organizer, snapshot.Phones[0].Phone.Kind); // top left
+        var mike = snapshot.Phones.Single(x => x.Phone.Name == "Mike");
+        Assert.Equal(ConsentStatus.OptedIn, mike.Consent);
+        Assert.Contains(mike.Thread, m => m.Outcome == "AcceptedAndFilled");
 
         Assert.Equal(["Not-full alert", "Reminder", "Game start"], snapshot.Timers.Select(t => t.Timer));
         Assert.StartsWith("scheduled", snapshot.Timers[0].Status); // full, so it will skip
         Assert.Contains(snapshot.Timeline, e => e.Type == nameof(GameFilled));
-        Assert.Contains(snapshot.Timeline, e => e.Type == nameof(InvitationDeclined) && e.Details.StartsWith("Dave"));
+        Assert.Contains(snapshot.Timeline, e => e.Type == nameof(InvitationDeclined) && e.Details.StartsWith("Jim"));
     }
 
     private static async Task Eventually(Func<bool> condition)

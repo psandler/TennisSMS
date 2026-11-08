@@ -13,7 +13,8 @@
 Tennis Game Scheduler: an SMS-first service that fills tennis games (singles/doubles) for a single organizer. Players reply YES / NO / OUT by text or use a per-game link. No player accounts.
 
 - `docs/overview.md`: plain-language description of how the service works.
-- `docs/spec.md`: technical spec (v0.1 / MVP draft, under review).
+- `docs/spec.md`: technical spec for v0.1, complete and updated to match the build (§15 lists the changes from the draft).
+- `docs/enhancements.md`: future enhancements, not yet decided.
 
 Status: building v0.1. All v0.1 pieces exist: core domain logic, wiring (handlers, inbound pipeline, outbox, simulator gateway, timers), the phone simulator, organizer login and pages, and the player game page (`/g/{token}`). Twilio (spec §13) is not started. Don't change the docs unless asked.
 

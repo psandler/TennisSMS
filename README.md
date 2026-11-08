@@ -3,7 +3,8 @@
 An SMS-first service that fills tennis games (singles or doubles) for one organizer. The organizer creates a game and invites players. Players reply YES, NO or OUT by text, or tap a per-game link. Players don't have accounts.
 
 - [docs/overview.md](docs/overview.md): how the service works, in plain language.
-- [docs/spec.md](docs/spec.md): the technical spec for v0.1.
+- [docs/spec.md](docs/spec.md): the technical spec for v0.1, as built.
+- [docs/enhancements.md](docs/enhancements.md): ideas for after v0.1.
 
 Status: v0.1 runs end to end against a **simulated** SMS gateway, with fake phones in the browser. The Twilio integration (spec §13) isn't built yet, so no real texts are sent.
 
@@ -32,9 +33,9 @@ Then open http://localhost:5234/dev/simulator.
 
 ## Try it in the phone simulator
 
-The simulator (`/dev/simulator`) shows 8 fake player phones, the organizer's phone and one unknown number. Every text a fake phone sends goes through the same inbound pipeline real texts will use.
+The simulator (`/dev/simulator`) shows the organizer's phone (top left), 7 fake player phones and one unknown number. Every text a fake phone sends goes through the same inbound pipeline real texts will use.
 
-1. **Reset**: wipes the dev database and seeds 8 players. They start as "Pending" because they haven't texted JOIN yet.
+1. **Reset**: wipes the dev database and seeds 7 players. They start as "Pending" because they haven't texted JOIN yet.
 2. **JOIN all**: every player texts JOIN and is opted in.
 3. **Quick game**: creates a doubles game about 20 hours out and invites everyone.
 4. Reply from any phone with the YES / NO / OUT buttons, or type a text.

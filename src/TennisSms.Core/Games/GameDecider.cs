@@ -206,7 +206,7 @@ public static class GameDecider
                 var draft = new Draft(game);
                 draft.Emit(new InvitationDeclined(playerId, channel, inboundMessageId));
                 draft.Notify(NoticeKind.Declined, me);
-                return draft.Done(ctx, outcome: ReplyOutcome.Declined);
+                return draft.Done(ctx, outcome: ReplyOutcome.Declined, checkShortfall: true);
             default:
                 // Nothing to decline. A plain acknowledgment is harmless.
                 return Reply(NoticeKind.Declined, me, ReplyOutcome.NotInvited);
@@ -227,7 +227,7 @@ public static class GameDecider
         var within = DropConfirmed(draft, game, ctx, playerId, channel, DropReason.PlayerRequest);
         draft.Notify(NoticeKind.Dropped, Recipient.Player(playerId));
         draft.Notify(NoticeKind.OrganizerPlayerDropped, Recipient.Organizer, playerId, within);
-        return draft.Done(ctx, outcome: ReplyOutcome.Dropped);
+        return draft.Done(ctx, outcome: ReplyOutcome.Dropped, checkShortfall: true);
     }
 
     /// <summary>
@@ -252,7 +252,7 @@ public static class GameDecider
             default:
                 return Decision.Nothing;
         }
-        return draft.Done(ctx);
+        return draft.Done(ctx, checkShortfall: true);
     }
 
     // ---------- Timers ----------
@@ -359,12 +359,34 @@ public static class GameDecider
             _notices.Add(new Notice(kind, to, about, within));
 
         /// <summary>
+        /// Can't-fill alert (enhancements E-6): when the people still waiting can't fill the open
+        /// spots, tell the organizer once. A player's reply or STOP triggers it, not the organizer's own
+        /// actions (the game page shows the shortfall). If the organizer is already getting a drop
+        /// alert, the shortfall goes into that text, so they get one text, not two.
+        /// </summary>
+        private void AlertShortfall()
+        {
+            var shortfall = State.Shortfall;
+            if (shortfall == 0 || State.ShortfallAlertSent) return;
+
+            Emit(new ShortfallAlertIssued(shortfall));
+            var drop = _notices.FindIndex(n => n.Kind == NoticeKind.OrganizerPlayerDropped);
+            if (drop >= 0)
+                _notices[drop] = _notices[drop] with { Shortfall = shortfall };
+            else
+                _notices.Add(new Notice(NoticeKind.OrganizerShortfall, Recipient.Organizer, Shortfall: shortfall));
+        }
+
+        /// <summary>
         /// Applies the "one text per number per command" rule for the organizer (spec §5):
         /// no player texts to the organizer about their own actions, and when the organizer
         /// gets an organizer text they don't also get the player version.
         /// </summary>
-        public Decision Done(GameContext ctx, bool organizerAction = false, ReplyOutcome outcome = ReplyOutcome.None)
+        public Decision Done(
+            GameContext ctx, bool organizerAction = false, ReplyOutcome outcome = ReplyOutcome.None, bool checkShortfall = false)
         {
+            if (checkShortfall) AlertShortfall();
+
             IEnumerable<Notice> notices = _notices;
             if (ctx.OrganizerPlayerId is { } organizerPlayer &&
                 (organizerAction || _notices.Any(n => n.To.IsOrganizer)))

@@ -66,16 +66,39 @@ public static class MessageComposer
             NoticeKind.Cancelled or NoticeKind.AlreadyCancelled => $"{when} has been cancelled.",
             NoticeKind.Reminder => WithLocation(ctx, loc => $"Reminder: tennis tomorrow, {when}{loc}. Playing: {roster}."),
             NoticeKind.AlreadyStarted => $"{when} has already started.",
-            NoticeKind.OrganizerPlayerDropped =>
-                $"{NameOf(ctx, notice.AboutPlayerId)} dropped from {when}. {Spots(spots)} open." +
-                (notice.WithinCancellationWindow ? $" Inside {ctx.CancellationNoticeHours}-hr window." : "") +
-                $" {ctx.OrganizerLink}",
+            NoticeKind.OrganizerPlayerDropped => PlayerDropped(ctx, notice, when, spots),
             NoticeKind.OrganizerGameFilled => $"{when} is full: {roster}.",
-            NoticeKind.OrganizerNotFullAlert =>
+            NoticeKind.OrganizerNotFullAlert => FirstThatFits(
                 $"{when} still needs {spots}. Free cancellation ends {TimeText.DayAndTime(ctx.CancellationCutoffLocal)}. {ctx.OrganizerLink}",
+                $"{when} still needs {spots}. Free cancellation ends {TimeText.DayAndTime(ctx.CancellationCutoffLocal)}."),
+            // "Fri 11/13 1-2pm can't fill yet: 2 in, 1 waiting. Invite 1 more."
+            NoticeKind.OrganizerShortfall => FirstThatFits(
+                $"{when} can't fill yet: {g.ConfirmedCount} in, {Waiting(g)}. Invite {notice.Shortfall} more. {ctx.OrganizerLink}",
+                $"{when} can't fill yet: {g.ConfirmedCount} in, {Waiting(g)}. Invite {notice.Shortfall} more."),
             _ => throw new ArgumentOutOfRangeException(nameof(notice), notice.Kind, null),
         };
     }
+
+    /// <summary>
+    /// "Mike dropped from Fri 11/13 1-2pm. 1 spot open. Inside 24-hr window. {link}". With a shortfall (E-6)
+    /// it also says how many more to invite. The longest form that fits wins; the link goes last.
+    /// </summary>
+    private static string PlayerDropped(GameMessageContext ctx, Notice notice, string when, int spots)
+    {
+        var who = $"{NameOf(ctx, notice.AboutPlayerId)} dropped from {when}.";
+        var window = notice.WithinCancellationWindow ? $" Inside {ctx.CancellationNoticeHours}-hr window." : "";
+        var link = $" {ctx.OrganizerLink}";
+        if (notice.Shortfall == 0)
+            return FirstThatFits($"{who} {Spots(spots)} open.{window}{link}", $"{who} {Spots(spots)} open.{window}");
+
+        var invite = $" Invite {notice.Shortfall} more.";
+        return FirstThatFits(
+            $"{who} {Spots(spots)} open, {Waiting(ctx.Game)}.{invite}{window}{link}",
+            $"{who}{invite}{window}{link}",
+            $"{who}{invite}{window}");
+    }
+
+    private static string Waiting(Game g) => g.InvitedCount == 0 ? "no one waiting" : $"{g.InvitedCount} waiting";
 
     /// <summary>Confirmed players' names, in the order they confirmed.</summary>
     public static string Roster(GameMessageContext ctx) => string.Join(", ",

@@ -144,4 +144,16 @@ public class PlayerRulesTests
         Assert.Equal(ConsentStatus.OptedOut, p.ConsentStatus);
         Assert.Null(PlayerRules.OptOut(p, OptOutSource.StopKeyword, null, now));
     }
+
+    [Fact]
+    public void The_organizer_role_is_granted_once()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var p = Player.Create(PlayerRules.Register(Guid.NewGuid(), "Phil", "5550100001", now));
+        Assert.False(p.IsOrganizer);
+
+        p.Apply(PlayerRules.GrantOrganizer(p, "config", now)!);
+        Assert.True(p.IsOrganizer);
+        Assert.Null(PlayerRules.GrantOrganizer(p, "config", now));
+    }
 }

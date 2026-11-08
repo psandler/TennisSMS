@@ -8,6 +8,7 @@ public class MessageTests
 {
     private const string WorstName = "Abcdefghijkl"; // 12 chars, the maximum
     private const string WorstLink = "https://tennissms.example.com/g/Ab3dE6gH9k"; // 42 chars
+    private const string WorstOrganizerLink = "https://tennissms.example.com/games/0b9f2c1e-6d4a-4f5b-9a37-2c8e1d7f4a60"; // 72 chars
 
     /// <summary>A game with worst-case data: long names, minutes on both times, 2-digit dates.</summary>
     private static GameMessageContext WorstCase(GameFormat format, string location, int confirmed)
@@ -25,7 +26,7 @@ public class MessageTests
             Game = game,
             Names = Enumerable.Range(1, 8).ToDictionary(Id, _ => WorstName),
             PlayerLink = _ => WorstLink,
-            OrganizerLink = WorstLink,
+            OrganizerLink = WorstOrganizerLink,
             OrganizerName = WorstName,
             Brand = "TennisSMS",
             CancellationCutoffLocal = start.AddDays(-1),
@@ -48,9 +49,11 @@ public class MessageTests
         var ctx = WorstCase(format, location: "Lincoln Park District Tennis Courts #4", confirmed);
         var to = kind.ToString().StartsWith("Organizer") ? Recipient.Organizer : Recipient.Player(Id(1));
 
-        var text = MessageComposer.Render(new Notice(kind, to, Id(2), WithinCancellationWindow: true), ctx);
-
-        Assert.True(Gsm7.FitsOneSegment(text), $"{kind}: {Gsm7.SeptetCount(text)} septets: {text}");
+        foreach (var shortfall in new[] { 0, 3 })
+        {
+            var text = MessageComposer.Render(new Notice(kind, to, Id(2), WithinCancellationWindow: true, Shortfall: shortfall), ctx);
+            Assert.True(Gsm7.FitsOneSegment(text), $"{kind}: {Gsm7.SeptetCount(text)} septets: {text}");
+        }
     }
 
     [Fact]
@@ -87,6 +90,10 @@ public class MessageTests
             MessageComposer.Render(new Notice(NoticeKind.OrganizerNotFullAlert, Recipient.Organizer), ctx));
         Assert.Equal("Mike dropped from Fri 11/13 1-2pm. 2 spots open. Inside 24-hr window. {OrganizerLink}",
             MessageComposer.Render(new Notice(NoticeKind.OrganizerPlayerDropped, Recipient.Organizer, Mike, true), ctx));
+        Assert.Equal("Fri 11/13 1-2pm can't fill yet: 2 in, no one waiting. Invite 2 more. {OrganizerLink}",
+            MessageComposer.Render(new Notice(NoticeKind.OrganizerShortfall, Recipient.Organizer, Shortfall: 2), ctx));
+        Assert.Equal("Mike dropped from Fri 11/13 1-2pm. 2 spots open, no one waiting. Invite 2 more. Inside 24-hr window. {OrganizerLink}",
+            MessageComposer.Render(new Notice(NoticeKind.OrganizerPlayerDropped, Recipient.Organizer, Mike, true, Shortfall: 2), ctx));
     }
 
     [Theory]

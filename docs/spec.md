@@ -1,6 +1,8 @@
 # Tennis Game Scheduler — Specification
 
-Status: draft for review. This spec describes **v0.1 of the software** (the MVP). Items marked **OPEN** are deliberately undecided; items marked **DEFAULT** are proposed values to confirm.
+Status: **v0.1 complete (2026-11-08).** This spec describes v0.1 of the software (the MVP) as built, against the simulator gateway. It has been updated where the build differed from the draft; §15 lists those changes. Twilio (§13) is the one piece left. New features go in [enhancements.md](enhancements.md), not here.
+
+Items marked **OPEN** are still undecided. Items marked **DEFAULT** are the values in use; they are configuration and can change.
 
 v0.1 priorities, in order:
 1. Correct core game logic (§4, §5).
@@ -54,7 +56,7 @@ Remove the "wrangler" burden of filling tennis games (doubles, also singles). Th
 - Aggregates are `partial` classes/records (Polecat 4.0 requirement).
 - Aggregates are self-aggregating with **inline snapshots** (`Snapshot<T>(SnapshotLifecycle.Inline)`), so the current state document is written in the same transaction as the events.
 - All read models are **inline projections** stored as Polecat documents (§4.5). Async projections and the async daemon are allowed later, but nothing in v0.1 needs them.
-- Command handlers use Wolverine's aggregate handler workflow (`[WriteAggregate]` / `IEventStream<T>`), returning events and outgoing messages. Handlers that touch more than one stream (e.g., STOP, §4.2) use the Polecat session directly with several `FetchForWriting` calls, still in one transaction.
+- Game command handlers use the Polecat session directly. A small helper (`GameWork`) takes the game stream with `FetchForExclusiveWriting` (§4.4), runs the pure decider (`GameDecider`: state + command → events + notices), appends the events, and turns notices into outgoing `SendSms` messages. Handlers that touch more than one stream (e.g., STOP, §4.2) lock each game the same way, still in one transaction. Wolverine's aggregate handler workflow (`[WriteAggregate]`) was not used, because every roster command needs the exclusive lock and several commands span streams.
 - Wolverine durability mode: `Solo` (single node, no leader election).
 - One `SaveChangesAsync` (applied by Wolverine's transactional middleware) commits events, snapshots, projected documents, and outgoing messages together.
 
@@ -75,15 +77,17 @@ One stream per player. The stream holds both profile changes and consent, so the
 | `PlayerDetailsChanged` | Name?, PhoneE164? |
 | `PlayerOptedIn` | Keyword, InboundMessageId, OccurredAt |
 | `PlayerOptedOut` | Source (`StopKeyword`), InboundMessageId, OccurredAt |
+| `OrganizerRoleGranted` | GrantedBy, OccurredAt. The player can organize games (added during the build, see below) |
 
-Snapshot document `Player`: `Id`, `Name`, `PhoneE164`, `ConsentStatus` (`Pending` | `OptedIn` | `OptedOut`), `CreatedAt`, `UpdatedAt`.
+Snapshot document `Player`: `Id`, `Name`, `PhoneE164`, `ConsentStatus` (`Pending` | `OptedIn` | `OptedOut`), `IsOrganizer`, `CreatedAt`, `UpdatedAt`.
+- **The organizer is a player.** On startup (and after the simulator's Reset) the app makes sure a player exists for the configured organizer: registered with the configured name and number, opted in, and granted the organizer role, each recorded with source `config`. The organizer's own phone already receives login codes and alerts, so no JOIN is needed. A STOP from the organizer is still respected. It runs again on every start and adds no events once everything is in place. v0.1 still identifies the organizer by the configured phone. The role is there so that more organizers can be added later (enhancements.md, E-3).
 - `UniqueIndex` on `PhoneE164`.
 - `Name` is what appears in texts: at most 12 characters, GSM-7 only (e.g., "Mike" or "Mike R"). Validated on entry. This bound is what lets templates guarantee one SMS segment (§8).
 - Phone numbers are normalized to E.164 on entry.
 
 ### 4.2 Consent rules
 - Only `OptedIn` players can be invited or added to games.
-- STOP takes effect immediately. In **one transaction**: append `PlayerOptedOut`; close each of the player's open invitations (`InvitationClosed`, reason `OptedOut`); for each upcoming game where they are confirmed, append `PlayerDropped` (reason `OptedOut`) and alert the organizer. The open-invitations read model (§4.5) supplies the list of affected games.
+- STOP takes effect immediately. In **one transaction**: append `PlayerOptedOut`; close each of the player's open invitations (`InvitationClosed`, reason `OptedOut`); for each upcoming game where they are confirmed, append `PlayerDropped` (reason `OptedOut`) and alert the organizer. The player's games (§4.5) supply the list of affected games.
 - After STOP, no further messages go to the player except the STOP confirmation.
 
 ### 4.3 Game (event-sourced aggregate)
@@ -96,6 +100,7 @@ State:
 - `Status`: `Open` | `Full` | `Cancelled` | `Started`
 - Per-player participation: `Confirmed` | `Invited` | `Declined` | `Closed` (with reason) | `Dropped` | `Removed`
 - `OpenSpots = Capacity − count(Confirmed)`
+- `Shortfall = max(0, OpenSpots − count(Invited))` while `Open`, else 0: how many more people must be invited before the game can fill
 
 Events:
 
@@ -116,11 +121,12 @@ Events:
 | `GameStarted` | — (emitted by timer at StartsAt) |
 | `ReminderIssued` | — (idempotency marker for the evening-before reminder) |
 | `CancellationWindowAlertIssued` | — (idempotency marker) |
+| `ShortfallAlertIssued` | Shortfall (idempotency marker for the can't-fill alert, added after v0.1, see §5) |
 
 A YES that finds no open invitation or no open spot changes nothing about the game, so it is **not** a game event. The outcome is recorded on the inbound message's `MessageLog` entry (§8) and the player gets the "sorry, filled" reply.
 
 ### 4.4 Invariants
-1. `count(Confirmed) ≤ Capacity` at all times. Two simultaneous YESes for the last spot must never both succeed. **Decided**: use the built-in exclusive stream lock for every command that changes a game's roster. In a Wolverine handler that is `[WriteModel(LoadStyle = ModelConcurrencyStyle.Exclusive)]`; in code that uses the session directly (STOP fan-out) it is Polecat's `FetchForExclusiveWriting` (SQL Server `UPDLOCK, HOLDLOCK`). Register a Wolverine retry-with-cooldown policy for `StreamLockedException`. The second YES waits for the first to commit, then sees the game full and gets the "sorry, filled" outcome. Confirm the Wolverine attribute works with `WolverineFx.Polecat` when building; `FetchForExclusiveWriting` is the fallback either way.
+1. `count(Confirmed) ≤ Capacity` at all times. Two simultaneous YESes for the last spot must never both succeed. **Decided and built**: every command that changes a game takes Polecat's exclusive stream lock, `FetchForExclusiveWriting` (SQL Server `UPDLOCK, HOLDLOCK`). A Wolverine retry-with-cooldown policy handles `StreamLockedException`. The second YES waits for the first to commit, then sees the game full and gets the "sorry, filled" outcome. An integration test against SQL Server checks this.
 2. Only `OptedIn` players can be invited or added.
 3. A player can only accept or decline an invitation in `Invited` state. No waitlist.
 4. A player in `Declined` cannot be re-invited to the same game in v0.1. A player in `Closed` (e.g., told "filled") can be re-invited.
@@ -134,11 +140,9 @@ All are updated in the same transaction as the events that change them.
 |---|---|---|
 | `Player` | Player snapshot (§4.1) | Phone → player lookup, `/players`, consent checks |
 | `Game` | Game snapshot (§4.3) | Organizer pages, game page, handlers |
-| `PlayerOpenItems` | Multi-stream projection over game events, one document per player | Which game a reply applies to (§6.3), STOP fan-out (§4.2). Lists open invitations and upcoming confirmed games, each with date/time |
-| `PageLink` | Projection of `PlayerInvited` / `PlayerAddedByOrganizer`, Id = token | `/g/{token}` lookup |
-| `UpcomingGames` | Projection over game events | Organizer home page |
+| `PageLink` | Multi-stream projection of `PlayerInvited` / `PlayerAddedByOrganizer`, Id = token | `/g/{token}` lookup |
 
-Finer-grained projections (for example one document per player per game) are easy to add with multi-stream projections if a page or handler wants them. Not decided; add when a concrete need shows up.
+**As built:** the draft also had `PlayerOpenItems` (one document per player) and `UpcomingGames` projections. Queries over the `Game` documents (`GameQueries`) replaced them: games that aren't over yet, filtered to the ones a player is in. At one organizer's volume that is a handful of rows, and a query can't drift out of step with the games. If volume grows, the projections can be added back without changing the callers.
 
 Plain documents (stored directly, not projected): `MessageLog` entries, `PendingClarification` (§6.3), `UnknownSender` (§6.4), `LoginCode` (§11.1).
 
@@ -161,6 +165,8 @@ Plain documents (stored directly, not projected): `MessageLog` entries, `Pending
 **Decline (NO).** `InvitationDeclined`; short acknowledgment.
 
 **Drop (OUT).** A confirmed player drops: `PlayerDropped`. If the game was Full, `SpotReopened`. Organizer is texted. If within the cancellation window (§9), the alert says so. Organizer's game page offers one-tap re-invite of every player whose invitation was closed (told "filled" etc.). Players who declined are not re-invited.
+
+**Can't-fill alert** (added after v0.1, enhancements E-6). When a player's NO, OUT or STOP leaves a shortfall (above), the organizer is texted once: `Fri 11/13 1-2pm can't fill yet: 2 in, 1 waiting. Invite 1 more. {OrganizerLink}`. If the same reply is an OUT, the shortfall goes into the drop alert instead, so the organizer still gets one text. `ShortfallAlertIssued` stops repeats. It re-arms once the shortfall is back to 0, because the organizer invited or added more or the game filled. The organizer's own changes (remove, create with too few invited) don't text; the game page shows the shortfall all the time.
 
 **Organizer remove.** `PlayerRemovedByOrganizer`; the player is texted that they're no longer in the game.
 
@@ -202,7 +208,7 @@ Case-insensitive, trimmed, tolerant of trailing punctuation.
 Note: `CANCEL` from a player is an opt-out keyword under carrier conventions, not a game action.
 
 ### 6.3 Which game a reply applies to
-- If the player has exactly one open invitation (or, for OUT, exactly one upcoming confirmed game), the reply applies to it. Source: `PlayerOpenItems` (§4.5).
+- If the player has exactly one open invitation (or, for OUT, exactly one upcoming confirmed game), the reply applies to it. Source: the player's games (§4.5).
 - If more than one applies, reply with a numbered list and store a `PendingClarification` document (player, original intent, the listed game ids, expiry):
   `Which game? 1) Fri 11/13 1pm 2) Sun 11/15 9am. Reply 1 or 2, or use the links.`
   A reply of `1` / `2` applies the original intent to that game. A new YES/NO/OUT replaces the pending clarification. **DEFAULT** expiry: 30 minutes; an expired or unmatched number gets the "didn't get that" reply.
@@ -234,12 +240,12 @@ The core never knows which provider is in use. The boundary is small and provide
 
 - **Outbound**: `ISmsSender.SendAsync(OutboundSms) → SendResult`. `OutboundSms` = message id (ours, used for idempotency), to (E.164), body. `SendResult` = accepted / failed, plus the provider's message id if any.
 - **Inbound**: each adapter produces `InboundSms` = from (E.164), to (E.164), body, provider message id, received-at, and publishes it to the inbound queue (§6.1). The core only ever sees `InboundSms`.
-- **Delivery status** (optional in v0.1): adapters may report `DeliveryStatusChanged(our message id, status)`; the core records it on `MessageLog`. The simulator reports delivered immediately; Twilio reports via its status callback.
+- **Delivery status** (optional in v0.1, **not built**): adapters may report `DeliveryStatusChanged(our message id, status)`; the core records it on `MessageLog`. The simulator reports delivered immediately; Twilio reports via its status callback.
 - Implementations:
   - `SimulatorGateway` (development): sending pushes the message into the simulator (§11.3); inbound comes from the simulator UI or the auto-responders.
   - `TwilioGateway` (later, §13): sending calls the Twilio REST API; inbound is a webhook endpoint that validates Twilio's signature and maps the form post to `InboundSms`.
 - Which gateway is active is configuration. Nothing outside the adapter references Twilio types.
-- An adapter contract test suite runs against both implementations (Twilio's in a test/sandbox mode when it exists), so swapping providers is checked, not assumed.
+- An adapter contract test suite runs against both implementations (Twilio's in a test/sandbox mode when it exists), so swapping providers is checked, not assumed. **Not built yet**, since there is only one implementation so far. Write it along with `TwilioGateway` (§13).
 
 ### 8.2 Outbound flow
 - Command handlers never call the gateway. They return `SendSms` messages, which Wolverine's transactional outbox persists with the events and delivers to a `SendSms` handler after commit. That handler calls the gateway and writes the outbound `MessageLog` entry.
@@ -248,7 +254,7 @@ The core never knows which provider is in use. The boundary is small and provide
 - **Segment rule:** every message must fit one SMS segment: ≤160 characters, GSM-7 charset only. No emoji, no curly quotes, no em dashes. Enforce with a validator in tests over every template with worst-case data (12-character names, §4.1). If a free-text field (e.g., location) would push a message over, drop that field from the SMS (the page has it).
 
 ### 8.3 Message templates (DRAFT)
-`{Brand}` is a short service prefix, **OPEN** (OD-4). Times render like `Fri 11/13 1-2pm`.
+`{Brand}` is a short service prefix, **OPEN** (OD-4; `TennisSMS` for now). Times render like `Fri 11/13 1-2pm`. The table shows the intent. The exact wording is in `MessageComposer`, and tests hold every template to the segment rule.
 
 | Trigger | Text |
 |---|---|
@@ -270,6 +276,7 @@ The core never knows which provider is in use. The boundary is small and provide
 | Unrecognized | `Sorry, didn't get that. Reply YES, NO, or OUT. Reply HELP for help.` |
 | Organizer: player dropped | `Mike dropped from Fri 11/13 1-2pm. 1 spot open. {OrganizerLink}` (adds `Inside 24-hr window.` when applicable) |
 | Organizer: game filled | `Fri 11/13 1-2pm is full: Phil, Mike, Dave, Sam.` |
+| Organizer: can't fill | `Fri 11/13 1-2pm can't fill yet: 2 in, 1 waiting. Invite 1 more. {OrganizerLink}`. Combined with a drop: `Mike dropped from Fri 11/13 1-2pm. 1 spot open, 1 waiting. Invite 1 more. {OrganizerLink}` |
 | Organizer: not full alert | `Fri 11/13 1-2pm still needs 1. Free cancellation ends Thu 1pm. {OrganizerLink}` |
 | Unknown number sent JOIN | `This number is for invited players only. Ask the organizer to add you.` (§6.4) |
 | Join / HELP / STOP | Placeholders. Final wording comes from the Twilio compliance package (§13) |
@@ -286,7 +293,7 @@ Per game, computed from local times (§10):
 
 - `PlayerDropped.WithinCancellationWindow` = drop occurred after the cutoff.
 - Implementation: **Wolverine scheduled messages.** When a game is scheduled or its time changes, the handler returns scheduled messages (`NotFullAlertDue`, `ReminderDue`, `GameStartDue`) for the computed UTC due times. They are persisted with the transaction and survive restarts. No in-memory schedule.
-- Each scheduled message carries the `StartsAtLocal` it was computed from. When it fires, the handler loads the game and does nothing if the game was cancelled, already started, or its start time no longer matches (a newer message exists). Idempotency markers make a timer safe to fire twice.
+- Each scheduled message carries the `StartsAtLocal` it was computed from. When it fires, the handler loads the game and does nothing if the game was cancelled, already started, or its start time no longer matches (a newer message exists). Idempotency markers make a timer safe to fire twice. Changing the start time clears the markers, so a moved game gets its own reminder and not-full alert.
 - Court policy values (24h cutoff, 7-day booking window) are configuration, not code.
 
 ## 10. Time
@@ -320,9 +327,9 @@ The simulator is a first-class part of v0.1, not a debugging extra. Goal: watch 
 
 **Availability.** Registered only when `SimulatorGateway` is active (§8.1); never deployed with the Twilio gateway. Route `/dev/simulator`, interactive server rendering so everything updates live.
 
-**Seed and reset.** A "Reset" control wipes the dev database and seeds 8 players with fake numbers (e.g., `+1555010000x`) and short names, plus the organizer. Seeded players start `Pending`; a "JOIN all" control opts them all in. A "Quick game" control creates a doubles game starting ~20 hours out (inside the cancellation window, so window logic is live) and invites everyone.
+**Seed and reset.** A "Reset" control wipes the dev database and seeds 7 players with fake numbers (`+155501000xx`) and short names (Hyo, Jim, Michael, Mike, Ben, Nick, Jed), plus the organizer (Phil), who is already opted in. Seeded players start `Pending`; a "JOIN all" control opts them all in. A "Quick game" control creates a doubles game starting ~20 hours out (inside the cancellation window, so window logic is live) and invites everyone.
 
-**Phone grid.** One card per player phone (8), plus an organizer phone and one "unknown number" phone. Each card shows:
+**Phone grid.** The organizer phone first (top left), then one card per player phone (7), then one "unknown number" phone. Each card shows:
 - Name, number, and consent status badge.
 - The message thread (from `MessageLog`), newest at the bottom, outbound and inbound visually distinct, links clickable (opens the game page in a new tab).
 - Quick-reply buttons: `YES`, `NO`, `OUT`, `1`, `2`, `JOIN`, `STOP`, `HELP`, plus a free-text box.
@@ -376,7 +383,7 @@ Decided:
 ## 14. Testing expectations
 - Aggregate tests: given events, when command, then events (or rejection). Cover every invariant in §4.4. Wolverine handlers that return events and messages are tested as plain functions.
 - Concurrency test: two acceptances for the last spot, against a real database.
-- Projection tests: `PlayerOpenItems`, `PageLink`, and snapshots reflect the events after each command.
+- Projection tests: `PageLink` and snapshots reflect the events after each command.
 - Parser tests for every row in §6.2, including iPhone reaction text and clarification numbers.
 - Clarification tests: two open invitations → numbered prompt; `2` applies to the second; expiry; a new YES replaces the pending prompt.
 - Notification tests: no phone number receives more than one text per command (including the organizer as player); the filling acceptor gets only the combined text; a game created already full sends only "game on" to added players; reminders are skipped for late confirmations.
@@ -386,3 +393,19 @@ Decided:
 - Integration tests run against SQL Server 2025 (local instance or container).
 - Simulator scenarios (§11.3) double as end-to-end tests: run headless through `SimulatorGateway` and assert on the resulting texts and events.
 - End-to-end through the simulator gateway: create game, invite 3, two YES, one NO, game fills, one OUT, re-invite, fill again.
+
+## 15. Changes from the draft (as built)
+
+These are the places where the build differs from the reviewed draft. The sections above are already updated.
+
+| Area | Draft | Built | Section |
+|---|---|---|---|
+| Handlers | Wolverine aggregate handler workflow with the `[WriteModel]` exclusive attribute | Handlers that use the session directly, with `FetchForExclusiveWriting` and a pure `GameDecider` | §3.1, §4.4 |
+| Read models | `PlayerOpenItems` and `UpcomingGames` projections | Queries over `Game` documents | §4.5 |
+| Timers | Idempotency markers | Markers are cleared when the start time changes | §9 |
+| Delivery status | Optional | Not built | §8.1 |
+| Adapter contract tests | Run against both gateways | Waiting for `TwilioGateway` | §8.1, §13 |
+| Simulator | 8 players | 7 named players, organizer phone first | §11.3 |
+| Organizer as player | Not covered | A player whose number is the organizer's counts as the organizer and gets only the organizer texts | §5 |
+| Can't-fill alert | Not in the draft | Added after v0.1 (enhancements E-6) | §4.3, §5, §8.3 |
+| Organizer player record | Organizer exists only in configuration | Created on startup as an opted-in player with `OrganizerRoleGranted` | §4.1 |

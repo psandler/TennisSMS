@@ -23,6 +23,10 @@
             <span class="badge @Ui.StatusClass(g)">@Ui.Status(g)</span>
         </div>
         <p>@g.Location · @g.ConfirmedCount of @g.Capacity playing</p>
+        @if (g.Shortfall > 0)
+        {
+            <p class="shortfall">Can't fill yet: even if everyone invited says yes, it's @(g.ConfirmedCount + g.InvitedCount) of @g.Capacity. Invite at least @g.Shortfall more.</p>
+        }
 
         @if (_error is not null)
         {

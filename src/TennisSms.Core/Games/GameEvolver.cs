@@ -34,6 +34,7 @@ public static class GameEvolver
             case GameStarted x: game.Apply(x); break;
             case ReminderIssued x: game.Apply(x); break;
             case CancellationWindowAlertIssued x: game.Apply(x); break;
+            case ShortfallAlertIssued x: game.Apply(x); break;
             default: throw new ArgumentException($"Unknown game event {e.GetType().Name}");
         }
         return game;

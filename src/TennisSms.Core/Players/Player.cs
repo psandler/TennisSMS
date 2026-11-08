@@ -12,6 +12,12 @@ public sealed record PlayerDetailsChanged(string Name, string PhoneE164, DateTim
 public sealed record PlayerOptedIn(string Keyword, Guid? InboundMessageId, DateTimeOffset At);
 public sealed record PlayerOptedOut(OptOutSource Source, Guid? InboundMessageId, DateTimeOffset At);
 
+/// <summary>
+/// The player can organize games. v0.1 grants it once, to the configured organizer (GrantedBy "config").
+/// Later the owner grants it from the players page (docs/enhancements.md, E-3).
+/// </summary>
+public sealed record OrganizerRoleGranted(string GrantedBy, DateTimeOffset At);
+
 /// <summary>Current state of a player. Polecat stores it as an inline snapshot (unique phone index).</summary>
 public sealed partial class Player
 {
@@ -19,6 +25,7 @@ public sealed partial class Player
     public string Name { get; set; } = "";
     public string PhoneE164 { get; set; } = "";
     public ConsentStatus ConsentStatus { get; set; }
+    public bool IsOrganizer { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
@@ -48,6 +55,12 @@ public sealed partial class Player
     public void Apply(PlayerOptedOut e)
     {
         ConsentStatus = ConsentStatus.OptedOut;
+        UpdatedAt = e.At;
+    }
+
+    public void Apply(OrganizerRoleGranted e)
+    {
+        IsOrganizer = true;
         UpdatedAt = e.At;
     }
 }
@@ -84,6 +97,10 @@ public static class PlayerRules
 
     public static PlayerOptedOut? OptOut(Player player, OptOutSource source, Guid? inboundMessageId, DateTimeOffset now) =>
         player.ConsentStatus == ConsentStatus.OptedOut ? null : new PlayerOptedOut(source, inboundMessageId, now);
+
+    /// <summary>Null when the player already has the role.</summary>
+    public static OrganizerRoleGranted? GrantOrganizer(Player player, string grantedBy, DateTimeOffset now) =>
+        player.IsOrganizer ? null : new OrganizerRoleGranted(grantedBy, now);
 }
 
 public static class PhoneNumbers

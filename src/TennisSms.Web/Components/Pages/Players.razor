@@ -50,7 +50,7 @@
                     else
                     {
                         <tr>
-                            <td>@p.Name</td>
+                            <td>@p.Name @if (p.IsOrganizer) { <span class="badge organizer">Organizer</span> }</td>
                             <td>@Ui.Phone(p.PhoneE164)</td>
                             <td><span class="badge @p.ConsentStatus.ToString().ToLowerInvariant()">@Consent(p.ConsentStatus)</span></td>
                             <td><button class="link" @onclick="() => StartEdit(p)">edit</button></td>

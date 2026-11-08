@@ -82,6 +82,7 @@ a { color: var(--accent); }
 .muted { color: var(--muted); font-weight: normal; }
 .error { color: var(--danger); font-weight: 600; }
 .notice { color: #1d6b31; font-weight: 600; }
+.shortfall { color: #7a5b00; background: #fff6d6; padding: 6px 10px; border-radius: 6px; }
 .nowrap { white-space: nowrap; }
 
 .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
@@ -133,6 +134,7 @@ table.history tr.inbound td { background: #f4f8ff; }
 .badge.started { background: #e6e9ec; }
 .badge.optedin { background: #d7f2dd; color: #1d6b31; }
 .badge.pending { background: #fff1c2; color: #7a5b00; }
+.badge.organizer { background: #dfe8f7; color: #24487f; margin-left: 4px; }
 
 .segmented { white-space: nowrap; }
 .segmented button { border-radius: 0; margin-left: -1px; padding: 3px 10px; }

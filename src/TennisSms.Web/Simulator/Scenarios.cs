@@ -48,62 +48,62 @@ public static class Scenarios
 {
     public static readonly SimulatorScenario FillDoubles = new(
         "Fill a doubles game",
-        "Raj is added; Mike, Sam and Lee say YES, Dave says NO. The third YES fills it.",
+        "Nick is added; Hyo, Michael and Mike say YES, Jim says NO. The third YES fills it.",
         async c =>
         {
             var game = await c.GameAsync(GameFormat.Doubles, 3, 10, "Oak Park courts");
-            await c.AddAndInviteAsync(game, ["Raj"], ["Mike", "Dave", "Sam", "Lee"]);
-            return [c.Text(2, "Mike", "YES"), c.Text(4, "Dave", "NO"), c.Text(6, "Sam", "yes"), c.Text(8, "Lee", "Y")];
+            await c.AddAndInviteAsync(game, ["Nick"], ["Hyo", "Jim", "Michael", "Mike"]);
+            return [c.Text(2, "Hyo", "YES"), c.Text(4, "Jim", "NO"), c.Text(6, "Michael", "yes"), c.Text(8, "Mike", "Y")];
         });
 
     public static readonly SimulatorScenario RaceForLastSpot = new(
         "Race for the last spot",
-        "Singles with Mike in. Dave texts YES and Sam taps YES on his game page at the same instant. One wins.",
+        "Singles with Hyo in. Jim texts YES and Michael taps YES on his game page at the same instant. One wins.",
         async c =>
         {
             var game = await c.GameAsync(GameFormat.Singles, 3, 9, "Oak Park courts");
-            await c.AddAndInviteAsync(game, ["Mike"], ["Dave", "Sam"]);
-            return [c.Text(3, "Dave", "YES"), c.PageTap(3, "Sam", game, GameReply.Yes)];
+            await c.AddAndInviteAsync(game, ["Hyo"], ["Jim", "Michael"]);
+            return [c.Text(3, "Jim", "YES"), c.PageTap(3, "Michael", game, GameReply.Yes)];
         });
 
     public static readonly SimulatorScenario DropAndRefill = new(
         "Drop and refill",
-        "Game fills, Dave drops, the organizer re-invites, Kim takes the spot.",
+        "Game fills, Jim drops, the organizer re-invites, Ben takes the spot.",
         async c =>
         {
             var game = await c.GameAsync(GameFormat.Doubles, 3, 18, "Oak Park courts");
-            await c.AddAndInviteAsync(game, ["Mike", "Dave"], ["Sam", "Lee", "Kim"]);
+            await c.AddAndInviteAsync(game, ["Hyo", "Jim"], ["Michael", "Mike", "Ben"]);
             return
             [
-                c.Text(2, "Sam", "YES"), c.Text(4, "Lee", "YES"),
-                c.Text(7, "Dave", "OUT"),
+                c.Text(2, "Michael", "YES"), c.Text(4, "Mike", "YES"),
+                c.Text(7, "Jim", "OUT"),
                 c.Organizer(10, "re-invite closed invitations", new ReinviteClosedPlayers(game)),
-                c.Text(13, "Kim", "YES"),
+                c.Text(13, "Ben", "YES"),
             ];
         });
 
     public static readonly SimulatorScenario TwoInvitations = new(
         "Two invitations",
-        "Ana is invited to two games and says YES: she's asked which one, and answers 2.",
+        "Jed is invited to two games and says YES: he's asked which one, and answers 2.",
         async c =>
         {
             var first = await c.GameAsync(GameFormat.Doubles, 3, 9, "Oak Park courts");
             var second = await c.GameAsync(GameFormat.Doubles, 4, 9, "Oak Park courts");
-            await c.AddAndInviteAsync(first, [], ["Ana"]);
-            await c.AddAndInviteAsync(second, [], ["Ana"]);
-            return [c.Text(3, "Ana", "yes"), c.Text(7, "Ana", "2")];
+            await c.AddAndInviteAsync(first, [], ["Jed"]);
+            await c.AddAndInviteAsync(second, [], ["Jed"]);
+            return [c.Text(3, "Jed", "yes"), c.Text(7, "Jed", "2")];
         });
 
     public static readonly SimulatorScenario StopMidGame = new(
         "STOP mid-game",
-        "Tom is confirmed in one game and invited to another, then texts STOP.",
+        "Mike is confirmed in one game and invited to another, then texts STOP.",
         async c =>
         {
             var playing = await c.GameAsync(GameFormat.Doubles, 3, 10, "Oak Park courts");
             var invited = await c.GameAsync(GameFormat.Doubles, 4, 10, "Oak Park courts");
-            await c.AddAndInviteAsync(playing, ["Tom", "Raj"], ["Ana"]);
-            await c.AddAndInviteAsync(invited, [], ["Tom"]);
-            return [c.Text(3, "Tom", "STOP")];
+            await c.AddAndInviteAsync(playing, ["Mike", "Nick"], ["Jed"]);
+            await c.AddAndInviteAsync(invited, [], ["Mike"]);
+            return [c.Text(3, "Mike", "STOP")];
         });
 
     public static readonly SimulatorScenario Stranger = new(

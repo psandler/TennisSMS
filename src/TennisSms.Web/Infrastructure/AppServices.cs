@@ -2,6 +2,7 @@ using TennisSms.Core.Time;
 using TennisSms.Web.Games;
 using TennisSms.Web.Inbound;
 using TennisSms.Web.Organizer;
+using TennisSms.Web.Players;
 using TennisSms.Web.Simulator;
 using TennisSms.Web.Sms;
 
@@ -18,6 +19,7 @@ public static class AppServices
         services.AddSingleton<GameWork>();
         services.AddSingleton<InboundProcessor>();
         services.AddSingleton<OrganizerQueries>();
+        services.AddHostedService<OrganizerSetup>();
 
         var gateway = configuration.GetSection(TennisSmsOptions.Section)[nameof(TennisSmsOptions.Gateway)] ?? "Simulator";
         switch (gateway)
