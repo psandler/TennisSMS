@@ -183,7 +183,7 @@ public class WiringTests(AppHostFixture app)
         foreach (var body in new[] { "JOIN", "join", "hello?", "HELP", "HELP", "yes" })
             await app.TextAsync(stranger, body);
 
-        Assert.Equal([GeneralMessages.UnknownNumberJoin, GeneralMessages.Help(Brand)], app.TextsTo(stranger));
+        Assert.Equal([GeneralMessages.UnknownNumberJoin, GeneralMessages.UnknownNumberHelp(Brand)], app.TextsTo(stranger));
         var sender = await app.LoadAsync<UnknownSender>(stranger);
         Assert.Equal(6, sender!.MessageCount);
         Assert.True(sender.JoinReplied);

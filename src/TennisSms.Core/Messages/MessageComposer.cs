@@ -143,6 +143,13 @@ public static class GeneralMessages
     public static string Help(string brand) =>
         $"{brand}: Tennis game invites. Reply YES, NO, or OUT to an invite. Reply STOP to opt out.";
 
+    /// <summary>
+    /// HELP from a number that isn't a player (spec 6.4). Says what the service is and how to stop,
+    /// without explaining how to answer invites they'll never get.
+    /// </summary>
+    public static string UnknownNumberHelp(string brand) =>
+        $"{brand}: Game invites for players an organizer has added. This number isn't signed up. Reply STOP to opt out.";
+
     public const string UnknownNumberJoin = "This number is for invited players only. Ask the organizer to add you.";
 
     public const string Unrecognized = "Sorry, didn't get that. Reply YES, NO, or OUT. Reply HELP for help.";

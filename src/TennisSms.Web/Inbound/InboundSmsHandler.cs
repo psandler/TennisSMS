@@ -214,7 +214,7 @@ public sealed class InboundProcessor(GameWork work, IOptions<TennisSmsOptions> o
             ReplyIntent.Stop when DueToday(sender.LastStopReplyAt) =>
                 (GeneralMessages.StopConfirmed(Options.Brand), "StopConfirmed", () => sender.LastStopReplyAt = now),
             ReplyIntent.Help when DueToday(sender.LastHelpReplyAt) =>
-                (GeneralMessages.Help(Options.Brand), "Help", () => sender.LastHelpReplyAt = now),
+                (GeneralMessages.UnknownNumberHelp(Options.Brand), "UnknownNumberHelp", () => sender.LastHelpReplyAt = now),
             _ => null,
         };
 

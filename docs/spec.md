@@ -219,7 +219,7 @@ Note: `CANCEL` from a player is an opt-out keyword under carrier conventions, no
 A number that isn't a seeded player is untrusted, and every reply to it costs money once Twilio is live (inbound texts cost too, but replies double it and are the part we control). Rules:
 - `JOIN` from an unknown number gets exactly one reply: `This number is for invited players only. Ask the organizer to add you.` It doesn't name the organizer or give contact details: someone legitimately invited already knows who to ask, and anyone else learns nothing.
 - That reply is sent **at most once per number** (tracked in an `UnknownSender` document). Repeat JOINs get no reply.
-- `HELP` and `STOP` from an unknown number: handled the same way the carrier rules require for any number (STOP gets its confirmation, HELP its help text), also at most once per number per day. When Twilio is live, its own STOP/HELP handling may answer these before the app sees them (§13).
+- `HELP` and `STOP` from an unknown number: handled the same way the carrier rules require for any number (STOP gets its confirmation; HELP gets a short non-player version of the help text, which says what the service is and how to stop but not how to answer invites), also at most once per number per day. When Twilio is live, its own STOP/HELP handling may answer these before the app sees them (§13).
 - Anything else from an unknown number: logged in `MessageLog`, **no reply**.
 - Global cap on all replies to unknown numbers (**DEFAULT**: 20 per hour). Over the cap, log and stop replying, and tell the organizer once.
 - The organizer page shows recent unknown senders so a real person can be added if wanted.
@@ -278,6 +278,7 @@ The core never knows which provider is in use. The boundary is small and provide
 | Organizer: game filled | `Fri 11/13 1-2pm is full: Phil, Mike, Dave, Sam.` |
 | Organizer: can't fill | `Fri 11/13 1-2pm can't fill yet: 2 in, 1 waiting. Invite 1 more. {OrganizerLink}`. Combined with a drop: `Mike dropped from Fri 11/13 1-2pm. 1 spot open, 1 waiting. Invite 1 more. {OrganizerLink}` |
 | Organizer: not full alert | `Fri 11/13 1-2pm still needs 1. Free cancellation ends Thu 1pm. {OrganizerLink}` |
+| Unknown number sent HELP | `{Brand}: Game invites for players an organizer has added. This number isn't signed up. Reply STOP to opt out.` (§6.4) |
 | Unknown number sent JOIN | `This number is for invited players only. Ask the organizer to add you.` (§6.4) |
 | Join / HELP / STOP | Placeholders. Final wording comes from the Twilio compliance package (§13) |
 

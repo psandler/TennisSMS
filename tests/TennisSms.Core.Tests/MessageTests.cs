@@ -111,7 +111,7 @@ public class MessageTests
         foreach (var text in new[]
                  {
                      GeneralMessages.JoinConfirmed("TennisSMS"), GeneralMessages.StopConfirmed("TennisSMS"),
-                     GeneralMessages.Help("TennisSMS"), GeneralMessages.UnknownNumberJoin, GeneralMessages.Unrecognized,
+                     GeneralMessages.Help("TennisSMS"), GeneralMessages.UnknownNumberHelp("TennisSMS"), GeneralMessages.UnknownNumberJoin, GeneralMessages.Unrecognized,
                      GeneralMessages.NoOpenInvites, GeneralMessages.NoUpcomingGames, GeneralMessages.NotSignedUp,
                      GeneralMessages.WhichGame(three), GeneralMessages.UnknownSendersPaused("TennisSMS"), GeneralMessages.LoginCode("TennisSMS", "123456", 10),
                      GeneralMessages.WhichGame(Enumerable.Repeat(new DateTime(2026, 12, 30, 10, 30, 0), GeneralMessages.MaxChoices).ToList()),
