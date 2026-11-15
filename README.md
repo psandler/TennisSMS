@@ -3,10 +3,12 @@
 An SMS-first service that fills tennis games (singles or doubles) for one organizer. The organizer creates a game and invites players. Players reply YES, NO or OUT by text, or tap a per-game link. Players don't have accounts.
 
 - [docs/overview.md](docs/overview.md): how the service works, in plain language.
-- [docs/spec.md](docs/spec.md): the technical spec for v0.1, as built.
+- [docs/architecture.md](docs/architecture.md): how the app is put together: components, data, and the main message flows (diagrams).
+- [docs/spec-v0.1.md](docs/spec-v0.1.md): the technical spec for v0.1, as built.
+- [docs/spec-v0.2.md](docs/spec-v0.2.md): the spec for v0.2 (draft): flexible player counts, and an optional SQL Server container for development.
 - [docs/enhancements.md](docs/enhancements.md): ideas for after v0.1.
 
-Status: v0.1 runs end to end against a **simulated** SMS gateway, with fake phones in the browser. The Twilio integration (spec §13) isn't built yet, so no real texts are sent.
+Status: v0.1 is complete. It runs end to end against a **simulated** SMS gateway, with fake phones in the browser. The Twilio integration (spec-v0.1 §13) isn't built yet, so no real texts are sent.
 
 ## Prerequisites
 
@@ -47,6 +49,32 @@ Next to the phones, the page shows:
 - **Timers**: each game's not-full alert, reminder and start time, with a **Fire now** button. Timers otherwise run on real time.
 - **Event timeline**: every event recorded, newest first. It shows why each text was sent.
 
+## Record the scenarios as videos
+
+`tools/TennisSms.ScenarioRecorder` uses Playwright to record a guided `tour` of the app as a video (about 4 minutes). Every step is a visible click, with a drawn pointer, click ripples, spotlights, captions and title cards. The tour covers:
+- players opting in, and the organizer signing in and creating a game;
+- players replying by text and by tapping their link;
+- the can't-fill alert, then two more invited: one takes the spot and the other is told it filled;
+- a player dropping out, the organizer's options (re-invite or invite someone new), and the refill;
+- a reminder.
+
+The script is `Tour.cs`; new recordings go in their own files and are listed in `Recorder.Available`.
+
+**Every recording resets the dev database.**
+
+```bash
+dotnet run --project tools/TennisSms.ScenarioRecorder
+```
+
+- It uses the app if it's already running on http://localhost:5234 (for example from Visual Studio). Otherwise it starts the app and stops it afterwards.
+- Videos go to `recordings/` (git-ignored) as `<name>-<yyyy-MM-dd-HHmm>.webm`, so earlier takes are kept.
+- The first run downloads Playwright's Chromium and FFmpeg (a few hundred MB, kept in `%LOCALAPPDATA%\ms-playwright`).
+- Options (after `--`):
+  - `--list`: what can be recorded. Name some to record only those, e.g. `tour`.
+  - `--pace 1.3`: stretch every pause, pointer glide and typing delay (1 = normal, 1.5 = slower, 0.8 = faster). Per-step timings and all caption text are in `Tour.cs`; the overall feel settings are at the top of `Stage.cs`.
+  - `--mp4`: also save an `.mp4` (H.264) copy. Use it for sharing: WebM doesn't play everywhere (iPhone, Mac, PowerPoint, many chat apps). Needs ffmpeg on the PATH (`winget install Gyan.FFmpeg`); Playwright's own copy can't write MP4.
+  - `--headed` shows the browser; `--url` and `--out` change the app address and output folder.
+
 ## Organizer pages
 
 Open http://localhost:5234/ to sign in. In development:
@@ -80,6 +108,7 @@ dotnet test TennisSms.slnx
 | `src/TennisSms.Core` | Domain only: events, `Game` and `Player` aggregates, `GameDecider` (pure game rules), reply parser, message templates, `GameClock` |
 | `src/TennisSms.Web` | The single app: Polecat and Wolverine setup, handlers, inbound pipeline, SMS gateway and simulator, Blazor pages |
 | `tests/` | Unit and integration tests |
+| `tools/TennisSms.ScenarioRecorder` | Records the guided tour as a video (Playwright) |
 | `docs/` | Overview and spec |
 
 **Stack:** .NET 10 and Blazor; [Polecat](https://polecat.jasperfx.net) for storage (events, documents and read models on SQL Server); [Wolverine](https://wolverinefx.net) for handlers, the transactional outbox, the durable inbound queue and scheduled timers.

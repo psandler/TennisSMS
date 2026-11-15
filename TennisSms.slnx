@@ -1,13 +1,19 @@
 <Solution>
   <Folder Name="/docs/">
     <File Path="CLAUDE.md" />
+    <File Path="docs/architecture.md" />
+    <File Path="docs/enhancements.md" />
     <File Path="docs/overview.md" />
-    <File Path="docs/spec.md" />
+    <File Path="docs/spec-v0.1.md" />
+    <File Path="docs/spec-v0.2.md" />
     <File Path="README.md" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/TennisSms.Core/TennisSms.Core.csproj" />
     <Project Path="src/TennisSms.Web/TennisSms.Web.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/TennisSms.ScenarioRecorder/TennisSms.ScenarioRecorder.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TennisSms.Core.Tests/TennisSms.Core.Tests.csproj" />

@@ -480,3 +480,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Scenario recorder output (tools/TennisSms.ScenarioRecorder)
+/recordings/

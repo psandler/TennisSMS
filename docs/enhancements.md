@@ -1,47 +1,22 @@
 # Future enhancements
 
-Ideas for after v0.1. The v0.1 spec ([spec.md](spec.md)) is complete and describes what's built. Nothing here is decided until it moves into a spec.
+Ideas for after v0.1. The v0.1 spec ([spec-v0.1.md](spec-v0.1.md)) is complete and describes what's built. Nothing here is decided until it moves into a versioned spec. "Spec §N" below means spec-v0.1.
 
 Each entry says what the idea is, why it's wanted, a rough shape, and the questions to settle first. **Open** marks a question nobody has answered yet.
 
 | # | Enhancement | Status |
 |---|---|---|
-| E-1 | Flexible player counts (min and max) | Idea |
+| E-1 | Flexible player counts (min and max) | **Moved to [spec-v0.2.md](spec-v0.2.md)** |
 | E-2 | Player groups | Idea |
 | E-3 | Multiple organizers (roles), and sharing players and groups | Roles: planned. Sharing: unsure |
 | E-4 | Player pages | Idea |
 | E-5 | Carried over from v0.1's out-of-scope list | Known |
-| E-6 | Can't-fill alert | **Built** (spec §5) |
+| E-6 | Can't-fill alert | **Built** in v0.1 (spec §5) |
+| E-7 | Testcontainers for the integration tests | Idea; do it with CI |
 
 ## E-1. Flexible player counts (min and max)
 
-**Idea.** Replace the fixed format (singles = 2, doubles = 4) with a minimum and maximum number of players per game.
-
-- Tennis example: Phil has a court and invites three people. Any total from 2 to 4 works: 2 is singles, 3 is a three-player game such as king of the court, and 4 is doubles. That's min 2, max 4.
-- Non-tennis example: trivia night has no minimum but a maximum of 8 (min 1, max 8).
-- Singles and doubles become presets: 2–2 and 4–4.
-
-**Rough shape.**
-- `GameScheduled` carries `MinPlayers` and `MaxPlayers` instead of `Format` and `Capacity`. Existing streams read `Singles` as 2–2 and `Doubles` as 4–4. Event versioning or an upcaster handles that.
-- Two thresholds instead of one:
-  - **Game on** when confirmed reaches min. The game is happening, and invitations stay open.
-  - **Full** when confirmed reaches max. Invitations close, as `GameFilled` does today.
-- The current invariant `confirmed ≤ capacity` becomes `confirmed ≤ max`, still under the same stream lock.
-- Texts change:
-  - Under min: "1 more needed".
-  - Between min and max: "Game on with 3. Room for 1 more."
-  - At max: today's "game on" text.
-- A drop that takes the game below min is the important alert to the organizer. A drop that leaves it at or above min may need only a quiet note, or none.
-- The not-full alert becomes a **below-min alert**. When there's no min, there's nothing to alert.
-- An activity name per game (Tennis, Trivia, …) so texts don't say "tennis" for trivia. Watch the one-segment rule (spec §8.2): the name needs a short length limit.
-
-**Open questions.**
-- When min is reached but not max, does everyone who's already confirmed get a "game on" text? And again when it later fills?
-- Does reaching min change anything for people still invited, or do they just see "game on, room for N" when they reply?
-- Is "no minimum" stored as min 1, or as a separate "always on" flag?
-- At start time, do open invitations close the way they do today? Probably yes.
-- Does the format word (singles, doubles, triples) still appear anywhere, or is it only a count?
-- Can the organizer change min or max after creating a game? v0.1 doesn't allow changing the format.
+Moved to [spec-v0.2.md](spec-v0.2.md), which is now the only place it's described.
 
 ## E-2. Player groups
 
@@ -166,4 +141,19 @@ Example: a doubles game with four invited. Two say YES, one says NO, and one has
 - Should the not-full alert near the cutoff still fire if the organizer has already had a can't-fill alert? Probably yes. It's about money (the free-cancellation cutoff), not about who's left to ask.
 - After the start time, or after the game is cancelled: never.
 
-Not an enhancement but still to do: the **Twilio integration** (spec §13), which finishes v0.1 for real texts.
+## E-7. Testcontainers for the integration tests
+
+**Idea.** The integration test fixture starts its own throwaway SQL Server 2025 container (the `Testcontainers.MsSql` package), runs the tests against it, and removes it afterwards.
+
+**Why it's worth it, but not yet.** It earns its keep **when there's a CI build**. A CI runner then needs no database setup and no connection string. Every run starts from an empty server, so nothing left over from an earlier run can make a test pass or fail. Until then it mostly adds 10–20 seconds of container startup to every test run on a machine that already has SQL Server installed. The v0.2 compose file (spec-v0.2 §9) covers local use.
+
+**Rough shape.**
+- `AppHostFixture` starts the container when `TENNISSMS_TEST_DB` isn't set and Docker is available. Otherwise it uses `TENNISSMS_TEST_DB` or the installed instance, as today.
+- One container per test run, shared by all integration tests (they already share one host and run one at a time).
+- CI (GitHub Actions on Linux) runs `dotnet test` with no other setup.
+
+**Open questions.**
+- Should Testcontainers be the default for local test runs too, or only when no instance is configured?
+- Keep the installed-instance path at all, once CI exists?
+
+Not an enhancement but still to do: the **Twilio integration** (spec §13). It isn't assigned to a version yet.

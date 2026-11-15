@@ -1,6 +1,6 @@
-# Tennis Game Scheduler — Specification
+# Tennis Game Scheduler — Specification v0.1
 
-Status: **v0.1 complete (2026-11-08).** This spec describes v0.1 of the software (the MVP) as built, against the simulator gateway. It has been updated where the build differed from the draft; §15 lists those changes. Twilio (§13) is the one piece left. New features go in [enhancements.md](enhancements.md), not here.
+Status: **Complete (2026-11-10). Frozen.** This spec describes v0.1 of the software (the MVP) as built, against the simulator gateway. It was updated where the build differed from the draft; §15 lists those changes. Twilio (§13) was outside v0.1 by design and is not built yet. Changes go in [spec-v0.2.md](spec-v0.2.md), ideas in [enhancements.md](enhancements.md). Code comments that say "spec §N" point at this document.
 
 Items marked **OPEN** are still undecided. Items marked **DEFAULT** are the values in use; they are configuration and can change.
 
@@ -121,7 +121,7 @@ Events:
 | `GameStarted` | — (emitted by timer at StartsAt) |
 | `ReminderIssued` | — (idempotency marker for the evening-before reminder) |
 | `CancellationWindowAlertIssued` | — (idempotency marker) |
-| `ShortfallAlertIssued` | Shortfall (idempotency marker for the can't-fill alert, added after v0.1, see §5) |
+| `ShortfallAlertIssued` | Shortfall (idempotency marker for the can't-fill alert, added late in v0.1, see §5) |
 
 A YES that finds no open invitation or no open spot changes nothing about the game, so it is **not** a game event. The outcome is recorded on the inbound message's `MessageLog` entry (§8) and the player gets the "sorry, filled" reply.
 
@@ -166,7 +166,7 @@ Plain documents (stored directly, not projected): `MessageLog` entries, `Pending
 
 **Drop (OUT).** A confirmed player drops: `PlayerDropped`. If the game was Full, `SpotReopened`. Organizer is texted. If within the cancellation window (§9), the alert says so. Organizer's game page offers one-tap re-invite of every player whose invitation was closed (told "filled" etc.). Players who declined are not re-invited.
 
-**Can't-fill alert** (added after v0.1, enhancements E-6). When a player's NO, OUT or STOP leaves a shortfall (above), the organizer is texted once: `Fri 11/13 1-2pm can't fill yet: 2 in, 1 waiting. Invite 1 more. {OrganizerLink}`. If the same reply is an OUT, the shortfall goes into the drop alert instead, so the organizer still gets one text. `ShortfallAlertIssued` stops repeats. It re-arms once the shortfall is back to 0, because the organizer invited or added more or the game filled. The organizer's own changes (remove, create with too few invited) don't text; the game page shows the shortfall all the time.
+**Can't-fill alert** (added late in v0.1, enhancements E-6). When a player's NO, OUT or STOP leaves a shortfall (above), the organizer is texted once: `Fri 11/13 1-2pm can't fill yet: 2 in, 1 waiting. Invite 1 more. {OrganizerLink}`. If the same reply is an OUT, the shortfall goes into the drop alert instead, so the organizer still gets one text. `ShortfallAlertIssued` stops repeats. It re-arms once the shortfall is back to 0, because the organizer invited or added more or the game filled. The organizer's own changes (remove, create with too few invited) don't text; the game page shows the shortfall all the time.
 
 **Organizer remove.** `PlayerRemovedByOrganizer`; the player is texted that they're no longer in the game.
 
@@ -408,5 +408,5 @@ These are the places where the build differs from the reviewed draft. The sectio
 | Adapter contract tests | Run against both gateways | Waiting for `TwilioGateway` | §8.1, §13 |
 | Simulator | 8 players | 7 named players, organizer phone first | §11.3 |
 | Organizer as player | Not covered | A player whose number is the organizer's counts as the organizer and gets only the organizer texts | §5 |
-| Can't-fill alert | Not in the draft | Added after v0.1 (enhancements E-6) | §4.3, §5, §8.3 |
+| Can't-fill alert | Not in the draft | Added late in v0.1 (enhancements E-6) | §4.3, §5, §8.3 |
 | Organizer player record | Organizer exists only in configuration | Created on startup as an opted-in player with `OrganizerRoleGranted` | §4.1 |
