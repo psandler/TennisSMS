@@ -50,45 +50,42 @@ sealed class Tour(Stage s)
 
     private async Task ExplainSimulatorAsync()
     {
-        await s.NoteAsync(null, "This is a demo",
-            "There are no real phones here. This page, the phone simulator, stands in for them. It only exists in development.");
+        await s.NoteAsync(null, "This is the Tennis SMS demo",
+            "This page, the phone simulator, is used to test and visualize SMS workflows in development (only). We will use it to take a tour of the main workflows of Tennis SMS");
 
-        await s.NoteAsync(s.Page.Locator("section.phones"), "Each box is a cell phone",
+        await s.NoteAsync(s.Page.Locator("section.phones"), "Each box represents a cell phone with a fake number",
             "One for each player, plus the organizer. Each one texts back and forth with the app's phone number, as a real phone would.");
 
         await s.NoteAsync(s.Phone("Phil"), "Phil is the organizer",
-            "He sets up games and gets the organizer texts: alerts about his games, and his sign-in codes.");
+            "He sets up games and gets the organizer texts/alerts about his games. He has already opted-in.");
 
         await s.NoteAsync(s.Phone("Hyo").Locator(".phone-head"), "A player: Hyo",
-            "His name and number, and his status. Phil has already added him, but he's \"Pending\": he gets nothing until he agrees by texting JOIN.");
+            "Her name and (fake) number, and her opt-in status. Phil has already added her, but she's \"Pending\": she can't be invited or added to a match until she texts JOIN.");
 
         await s.NoteAsync(s.Phone("Hyo").Locator(".thread"), "The conversation",
             "Texts between Hyo and the app show up here. Empty for now. Newest at the bottom.");
-
-        await s.NoteAsync(s.Phone("Unknown number"), "An unknown number",
-            "Someone nobody has added. It shows what a stranger gets if they text the app.");
     }
 
     private async Task PlayersJoinAsync()
     {
         await s.NoteAsync(s.Phone("Hyo").Locator("form.free"), "Texting from a phone",
-            "Type here and press Send, just like texting. Hyo signs up by texting the word JOIN.");
+            "In a simulated phone, a tester can type here and press Send, just like texting on a real phone. Hyo signs up by texting the word JOIN.");
         await s.TypeAsync(s.Phone("Hyo").Locator("form.free input"), "join", 220);
         await s.ClickAsync(s.Phone("Hyo").Locator("form.free").GetByRole(AriaRole.Button, new() { Name = "Send" }), "Send");
         await s.WaitForMessageAsync("Hyo", "signed up");
         await s.PauseAsync(800);
         await s.NoteAsync(s.Phone("Hyo").Locator(".thread"), "The app answers",
-            "Hyo's text is on the right, the app's reply on the left. He's signed up, and the reply tells him how to stop.");
+            "Hyo's text is on the right, the app's reply on the left. She's signed up, and the reply tells her how to stop.");
         await s.NoteAsync(s.Phone("Hyo").Locator(".phone-head"), "Hyo is in",
-            "His status is now \"OptedIn\". From now on he can be invited to games.");
+            "Her status is now \"OptedIn\". From now on she can be invited to games.");
 
         await s.NoteAsync(s.Phone("Jim").Locator(".quick"), "Shortcuts",
-            "These buttons send that word as a text in one click, so you don't have to type it. They're the words players use: YES, NO, OUT, JOIN, STOP, HELP.");
+            "These buttons act as single-click shortcuts. They're the words players use: YES, NO, OUT, JOIN, STOP, HELP.");
         await s.ClickAsync(s.PhoneButton("Jim", "JOIN"), "Jim texts JOIN");
         await s.WaitForMessageAsync("Jim", "signed up");
         await s.PauseAsync(800);
         await s.NoteAsync(s.Phone("Jim"), "Same result for Jim",
-            "Same JOIN text, same reply. The button only saves typing.");
+            "Same JOIN text, same reply--just a shortcut for the simulator and demo.");
 
         var resetAndJoin = s.Page.Locator(".sim-bar button").Filter(new() { HasTextRegex = new System.Text.RegularExpressions.Regex("^(Reset|JOIN all)$") });
         await s.NoteAsync(resetAndJoin, "Shortcuts for the whole simulator",
@@ -164,9 +161,9 @@ sealed class Tour(Stage s)
 
     private async Task RepliesByTextAsync()
     {
-        await s.NoteAsync(s.PhoneButton("Hyo", "YES"), "Hyo texts YES", "The YES button sends the text \"YES\", as if he typed it.");
+        await s.NoteAsync(s.PhoneButton("Hyo", "YES"), "Hyo texts YES", "The YES button sends the text \"YES\", as if she typed it.");
         await s.ClickAsync(s.PhoneButton("Hyo", "YES"), "Hyo: YES");
-        await TextNoteAsync("Hyo", "You're in", "He's in",
+        await TextNoteAsync("Hyo", "You're in", "She's in",
             "The reply confirms it, lists who's playing, and says how many spots are left.");
 
         await s.ClickAsync(s.PhoneButton("Jim", "NO"), "Jim: NO");
@@ -244,10 +241,10 @@ sealed class Tour(Stage s)
     private async Task DropOutAsync()
     {
         await s.TitleCardAsync("Plans change", "Hyo can't make it after all.");
-        await s.NoteAsync(s.PhoneButton("Hyo", "OUT"), "Hyo texts OUT", "OUT is how a player drops out of a game he said yes to.");
+        await s.NoteAsync(s.PhoneButton("Hyo", "OUT"), "Hyo texts OUT", "OUT is how a player drops out of a game they said yes to.");
         await s.ClickAsync(s.PhoneButton("Hyo", "OUT"), "Hyo: OUT");
         await TextNoteAsync("Hyo", "You're out", "Hyo is out",
-            "And he's told the organizer knows, so he doesn't need to text Phil separately.");
+            "And she's told the organizer knows, so she doesn't need to text Phil separately.");
         await TextNoteAsync("Phil", "dropped from", "Phil gets one text",
             "Who dropped, that a spot is open, that nobody is waiting to answer, and a link to the game page.");
     }
