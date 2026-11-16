@@ -223,6 +223,21 @@ public class OrganizerActionTests
     }
 
     [Fact]
+    public void A_player_who_dropped_out_cant_be_invited_again_but_can_be_added_back()
+    {
+        var game = Doubles(Added(Phil), Invited(Mike),
+            new InvitationAccepted(Mike, Channel.Sms, null, Tuesday),
+            new PlayerDropped(Mike, Channel.Sms, false, DropReason.PlayerRequest));
+
+        Assert.Throws<GameRuleException>(() =>
+            GameDecider.AddAndInvite(game, Ctx(), [], [Mike], AllOptedIn, NewToken));
+
+        var d = GameDecider.AddAndInvite(game, Ctx(), [Mike], [], AllOptedIn, NewToken);
+        Assert.Equal(Mike, Assert.IsType<PlayerAddedByOrganizer>(Assert.Single(d.Events)).PlayerId);
+        Assert.Equal(ParticipationStatus.Confirmed, After(game, d).Find(Mike)!.Status);
+    }
+
+    [Fact]
     public void Reinvite_goes_to_closed_invitations_but_never_decliners()
     {
         var game = Doubles(Added(Phil), Added(Mike), Added(Dave), Invited(Sam), Invited(Lee), Invited(Kim),

@@ -11,8 +11,10 @@ Items marked **OPEN** are undecided. Items marked **DEFAULT** are proposed answe
 **In scope:**
 - Flexible player counts: a minimum and a maximum per game, instead of a fixed singles or doubles capacity (enhancements E-1). Sections 2–8.
 - Development: SQL Server 2025 in a container, as an option next to the installed instance (§9). v0.1 §3 left this open.
+- No re-invite after a drop (§4). **Already built**, ahead of the rest of v0.2.
+- Real texting through Twilio, replacing the simulator outside development (§10). This was v0.1 §13.
 
-**Out of scope:** everything else in [enhancements.md](enhancements.md), and Twilio (v0.1 §13).
+**Out of scope:** everything else in [enhancements.md](enhancements.md).
 
 ## 2. Purpose
 
@@ -78,6 +80,8 @@ When one acceptance reaches both min and max (for example the last spot of a 4�
 **Reminder (v0.1 §9).** **DEFAULT**: sent to confirmed players only if the game is on. A game that isn't on gets no reminder; the organizer already had the below-minimum alert.
 
 **Game start.** Unchanged: open invitations close. A game below its minimum still "starts"; nothing is cancelled automatically. **OPEN**: should the organizer get a final "starting below minimum" text?
+
+**No re-invite after a drop.** **Already built.** A player who dropped out of a game (OUT, or a drop on their game page) can't be invited to that game again, the same as a player who declined (v0.1 §5). The organizer can still add them back as playing, for when they say in person that they can come after all. On the game page's "Invite more" list they're marked "(dropped out)", with only "Playing" available, and "Invite everyone" skips them. v0.1 §5 didn't say either way. The one-tap re-invite already left them out, but "Invite more" didn't.
 
 **Changing min or max after creation.** **DEFAULT**: not in v0.2. Cancel and create again, as with format in v0.1. **OPEN**: revisit if it's often needed.
 
@@ -145,7 +149,39 @@ All still one GSM-7 segment, tested with worst-case names, activity and location
 
 **Testing.** Run the whole suite once against the container (`TENNISSMS_TEST_DB`) and once against the installed instance before calling it done.
 
-## 10. Open decisions
+## 10. Twilio (v0.1 §13)
+
+**Goal.** Real texts to and from real phones. The simulator stays for development and tests.
+
+**Gateway.**
+- `TwilioGateway` implements the gateway abstraction (v0.1 §8.1): sending goes through Twilio's Messages API from the outbox (`SendSms`, v0.1 §8.2), exactly as the simulator gateway is called today.
+- The existing `Gateway` setting picks it: `Simulator` (development default) or `Twilio`. The simulator page and its services are registered only with `Simulator`, as now.
+- Account SID, auth token and the service number come from configuration (user secrets in development, app settings or Key Vault in Azure). Never committed.
+
+**Inbound webhook.**
+- A minimal API endpoint receives Twilio's POST for each incoming text, validates the `X-Twilio-Signature` header, maps it to `InboundSms` and puts it on the durable inbound queue (v0.1 §6.1). Everything after that is unchanged.
+- It replies quickly with an empty TwiML response. Replies to the player go out through the outbox, not in the webhook response.
+- Twilio can deliver the same message twice. The inbound pipeline must ignore a repeat `MessageSid`. **OPEN**: check whether v0.1's inbound handling already covers this.
+
+**Delivery status.** **DEFAULT**: a status callback endpoint records Twilio's delivered or failed status on the outbound `MessageLog` entry (v0.1 §8), shown in the game page's message history. No retries beyond Twilio's own.
+
+**Opt-out (v0.1 §13).**
+- Twilio's built-in STOP handling blocks texts to that number until the person re-subscribes. The app treats it as authoritative and mirrors it as `PlayerOptedOut`.
+- Twilio's default opt-in keywords may include `YES`, which collides with YES as "accept". Configure Advanced Opt-Out so only `JOIN`, `START` and `UNSTOP` re-subscribe.
+- A send that Twilio rejects because the number opted out (error 21610) also mirrors `PlayerOptedOut`, in case the app missed the STOP.
+
+**Registration and compliance.** A2P 10DLC Sole Proprietor registration, a public site with privacy policy and SMS terms, the text-to-join call to action, campaign description, sample messages and HELP/STOP wording. Tracked in `twilio-compliance.md`. Registration can take weeks, so it starts before the code is finished.
+
+**Hosting.** The webhook needs a public HTTPS address. **DEFAULT**: Azure App Service with Azure SQL Database (v0.1 §3), single instance. For local testing against real Twilio, a tunnel (ngrok or Dev Tunnels) to the local app.
+
+**Unchanged.** Core, the handlers, the decider and the message templates. All texts already fit one GSM-7 segment (v0.1 §8.2).
+
+**Testing.**
+- Unit tests: mapping a Twilio POST to `InboundSms`; signature validation accepts a correctly signed request and rejects others.
+- Integration tests: the webhook endpoint with a signed fake request lands the text on the inbound queue; a repeated `MessageSid` is processed once.
+- Manual: a test run with real phones on the registered number before calling it done.
+
+## 11. Open decisions
 
 | # | Decision | Notes |
 |---|---|---|
@@ -155,3 +191,6 @@ All still one GSM-7 segment, tested with worst-case names, activity and location
 | OD-9 | Changing min or max after creation | Default: not in v0.2 (§4) |
 | OD-10 | Extra simulator phones for the trivia scenario | §7 |
 | OD-11 | Make the container the default for development | Default: no. Requires Docker Desktop to run the app at all (§9) |
+| OD-12 | One service number for everyone, or one per organizer | One shared number for v0.2 unless decided otherwise. Affects registration (§10; enhancements) |
+| OD-13 | Hosting for the public webhook | Default: Azure App Service + Azure SQL (§10) |
+| OD-14 | Does v0.1's inbound pipeline already drop repeated Twilio messages | Check when building (§10) |

@@ -40,7 +40,7 @@ sealed class Tour(Stage s)
         await s.SignInOffCameraAsync(OrganizerPhone); // Phil's pages need it; the tour doesn't show it
         await s.ResetOffCameraAsync(); // empty phones (and no sign-in code), before the camera is on anything
         await s.BlankAsync();
-        await s.BlankTitleAsync("TennisSMS", "Filling a tennis game by text message", "Version 0.1 · pre-MVP · demo");
+        await s.BlankTitleAsync("TennisSMS", "Simple workflows to manage tennis matches via text messaging", "Version 0.1 · pre-MVP · demo");
 
         await s.GoInteractiveAsync("/dev/simulator");
         await s.BadgeAsync("TennisSMS v0.1 · pre-MVP demo");

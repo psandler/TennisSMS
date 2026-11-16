@@ -16,11 +16,17 @@ public sealed record GameDetail(Game Game, IReadOnlyDictionary<Guid, Player> Pla
     public IEnumerable<Participant> With(ParticipationStatus status) =>
         Game.WithStatus(status).OrderBy(p => p.ConfirmedAt).ThenBy(p => NameOf(p.PlayerId));
 
-    /// <summary>Opted-in players who can still be invited or added: not in, not invited, not declined.</summary>
+    /// <summary>
+    /// Opted-in players who can still be invited or added: not in, not invited, not declined.
+    /// Players who dropped out are here too, but only to be added back as playing (see <see cref="AddOnly"/>).
+    /// </summary>
     public IEnumerable<Player> Eligible => Players.Values
         .Where(p => p.ConsentStatus == ConsentStatus.OptedIn)
         .Where(p => Game.Find(p.Id)?.Status is null or ParticipationStatus.Closed or ParticipationStatus.Dropped or ParticipationStatus.Removed)
         .OrderBy(p => p.Name);
+
+    /// <summary>Players who dropped out: the organizer can add them back as playing, but not invite them again.</summary>
+    public IReadOnlySet<Guid> AddOnly => Game.WithStatus(ParticipationStatus.Dropped).Select(p => p.PlayerId).ToHashSet();
 }
 
 /// <summary>What the player's game page (spec §7) shows.</summary>

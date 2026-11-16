@@ -52,6 +52,8 @@ public static class GameDecider
             var status = game.Find(id)?.Status;
             if (status == ParticipationStatus.Declined)
                 throw new GameRuleException("A player who declined can't be re-invited to the same game.");
+            if (status == ParticipationStatus.Dropped)
+                throw new GameRuleException("A player who dropped out can't be re-invited to the same game. Add them as playing instead.");
             if (status is ParticipationStatus.Confirmed or ParticipationStatus.Invited)
                 throw new GameRuleException("That player is already in or already invited.");
         }

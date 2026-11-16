@@ -5,10 +5,10 @@ An SMS-first service that fills tennis games (singles or doubles) for one organi
 - [docs/overview.md](docs/overview.md): how the service works, in plain language.
 - [docs/architecture.md](docs/architecture.md): how the app is put together: components, data, and the main message flows (diagrams).
 - [docs/spec-v0.1.md](docs/spec-v0.1.md): the technical spec for v0.1, as built.
-- [docs/spec-v0.2.md](docs/spec-v0.2.md): the spec for v0.2 (draft): flexible player counts, and an optional SQL Server container for development.
+- [docs/spec-v0.2.md](docs/spec-v0.2.md): the spec for v0.2 (draft): flexible player counts, an optional SQL Server container for development, and real texting through Twilio.
 - [docs/enhancements.md](docs/enhancements.md): ideas for after v0.1.
 
-Status: v0.1 is complete. It runs end to end against a **simulated** SMS gateway, with fake phones in the browser. The Twilio integration (spec-v0.1 §13) isn't built yet, so no real texts are sent.
+Status: v0.1 is complete. It runs end to end against a **simulated** SMS gateway, with fake phones in the browser. The Twilio integration is planned for v0.2 (spec-v0.2 §10). Until then, no real texts are sent.
 
 ## Prerequisites
 

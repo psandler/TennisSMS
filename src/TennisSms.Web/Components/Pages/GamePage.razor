@@ -64,7 +64,7 @@
             }
             else
             {
-                <RosterPicker Players="_detail.Eligible.ToList()" Choices="_choices" Empty="Everyone who has opted in is already in, invited, or declined." />
+                <RosterPicker Players="_detail.Eligible.ToList()" AddOnly="_detail.AddOnly" Choices="_choices"Empty="Everyone who has opted in is already in, invited, or declined." />
                 @if (_choices.Any(c => c.Value != RosterChoice.None))
                 {
                     <div class="row actions">

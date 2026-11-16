@@ -156,4 +156,4 @@ Example: a doubles game with four invited. Two say YES, one says NO, and one has
 - Should Testcontainers be the default for local test runs too, or only when no instance is configured?
 - Keep the installed-instance path at all, once CI exists?
 
-Not an enhancement but still to do: the **Twilio integration** (spec §13). It isn't assigned to a version yet.
+Not an enhancement but still to do: the **Twilio integration** (spec §13). It's part of v0.2 ([spec-v0.2.md](spec-v0.2.md) §10).

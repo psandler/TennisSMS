@@ -15,10 +15,10 @@ Tennis Game Scheduler: an SMS-first service that fills tennis games (singles/dou
 - `docs/overview.md`: plain-language description of how the service works.
 - `docs/architecture.md`: components, data and message flows (Mermaid diagrams). Keep it in step with structural changes.
 - `docs/spec-v0.1.md`: technical spec for v0.1. Complete and frozen; matches the build (§15 lists the changes from the draft). "spec §N" in code comments points here.
-- `docs/spec-v0.2.md`: spec for v0.2 (draft): flexible player counts (min and max), and an optional SQL Server container for development.
+- `docs/spec-v0.2.md`: spec for v0.2 (draft): flexible player counts (min and max), an optional SQL Server container for development, and Twilio.
 - `docs/enhancements.md`: future enhancements, not yet decided.
 
-Status: v0.1 is complete: core domain logic, wiring (handlers, inbound pipeline, outbox, simulator gateway, timers), the phone simulator, organizer login and pages, and the player game page (`/g/{token}`). v0.2 is specified (draft) but not started. Twilio (spec-v0.1 §13) is not started and not assigned to a version. Don't change the docs unless asked.
+Status: v0.1 is complete: core domain logic, wiring (handlers, inbound pipeline, outbox, simulator gateway, timers), the phone simulator, organizer login and pages, and the player game page (`/g/{token}`). v0.2 is specified (draft): flexible player counts, an optional SQL Server container, and Twilio (spec-v0.2 §10). Of v0.2, only the no-re-invite-after-a-drop rule is built. Don't change the docs unless asked.
 
 ## Layout
 
