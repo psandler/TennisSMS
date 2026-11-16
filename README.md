@@ -53,7 +53,7 @@ Next to the phones, the page shows:
 
 `tools/TennisSms.ScenarioRecorder` uses Playwright to record a guided `tour` of the app as a video. Every step is a visible click with a drawn pointer. The action pauses for explanatory notes beside what they describe, and title cards mark each section. The tour covers:
 - the phone simulator explained, and players signing up by texting JOIN;
-- the organizer signing in and creating a game;
+- the organizer creating a game (the recorder signs in off camera);
 - players replying by text and by tapping their link;
 - the can't-fill alert, then two more invited: one takes the spot and the other is told it filled;
 - a player dropping out, the organizer's options (re-invite or invite someone new), and the refill;

@@ -11,12 +11,12 @@ using Microsoft.Playwright;
 /// </summary>
 sealed class Tour(Stage s)
 {
+    private const string OrganizerPhone = "555-010-0001";
     private string _gamePath = "";
 
     public async Task RunAsync()
     {
         await OpeningAsync();
-        await SignInAsync();
         await CreateGameAsync();
         await InvitationsArriveAsync();
         await RepliesByTextAsync();
@@ -36,7 +36,9 @@ sealed class Tour(Stage s)
     /// <summary>From a blank screen to every player signed up. Also recorded on its own as "opening".</summary>
     public async Task OpeningAsync()
     {
-        await s.ResetOffCameraAsync(); // empty phones, before the camera is on anything
+        await s.BlankAsync(0);
+        await s.SignInOffCameraAsync(OrganizerPhone); // Phil's pages need it; the tour doesn't show it
+        await s.ResetOffCameraAsync(); // empty phones (and no sign-in code), before the camera is on anything
         await s.BlankAsync();
         await s.BlankTitleAsync("TennisSMS", "Filling a tennis game by text message", "Version 0.1 · pre-MVP · demo");
 
@@ -87,14 +89,9 @@ sealed class Tour(Stage s)
         await s.NoteAsync(s.Phone("Jim"), "Same result for Jim",
             "Same JOIN text, same reply--just a shortcut for the simulator and demo.");
 
-        var resetAndJoin = s.Page.Locator(".sim-bar button").Filter(new() { HasTextRegex = new System.Text.RegularExpressions.Regex("^(Reset|JOIN all)$") });
-        await s.NoteAsync(resetAndJoin, "Shortcuts for the whole simulator",
-            "Reset wipes everything and starts over, with the players added but Pending. JOIN all has every player text JOIN at once.");
-        await s.ClickAsync(s.Page.GetByRole(AriaRole.Button, new() { Name = "Reset", Exact = true }), "Reset");
-        await s.WaitUntilQuietAsync();
-        await s.NoteAsync(s.Page.Locator("section.phones"), "A clean slate",
-            "Hyo's and Jim's texts are gone, and everyone is Pending again.");
-        await s.ClickAsync(s.Page.GetByRole(AriaRole.Button, new() { Name = "JOIN all", Exact = true }), "JOIN all");
+        await s.NoteAsync(null, "Now everyone else signs up", "The same JOIN shortcut, on each of the other phones.");
+        foreach (var name in new[] { "Michael", "Mike", "Ben", "Nick", "Jed" })
+            await s.QuickClickAsync(s.PhoneButton(name, "JOIN"));
         await s.WaitUntilQuietAsync();
         await s.WaitForMessageAsync("Jed", "signed up");
         await s.NoteAsync(s.Page.Locator("section.phones"), "Everyone has signed up",
@@ -103,30 +100,9 @@ sealed class Tour(Stage s)
 
     // ---------- 2. Organizer ----------
 
-    private async Task SignInAsync()
-    {
-        await s.TitleCardAsync("The organizer", "Phil signs in with a code texted to his phone. No passwords.");
-        await s.GoAsync("/login");
-        var phone = s.Page.Locator("input[name=PhoneInput]");
-        await s.NoteAsync(phone, "Organizer sign-in",
-            "These are Phil's pages for setting up and running games. He signs in with his mobile number.");
-        await s.TypeAsync(phone, "555-010-0001");
-        await s.ClickAsync(s.Page.GetByRole(AriaRole.Button, new() { Name = "Text me a code" }));
-        var codeInput = s.Page.Locator("input[name=CodeInput]");
-        await codeInput.WaitForAsync();
-
-        var code = await s.ReadLoginCodeAsync();
-        await s.NotificationAsync("Text on Phil's phone", $"TennisSMS login code: {code}. It expires in 10 minutes.", 2500);
-        await s.NoteAsync(codeInput, "The code arrives by text",
-            "A six-digit code, sent to Phil's phone. It's good for 10 minutes and works once.");
-        await s.TypeAsync(codeInput, code, 160);
-        await s.ClickAsync(s.Page.GetByRole(AriaRole.Button, new() { Name = "Log in" }));
-        await s.Page.WaitForURLAsync(u => !u.Contains("/login"));
-        await s.PauseAsync(1200);
-    }
-
     private async Task CreateGameAsync()
     {
+        await s.TitleCardAsync("The organizer", "Phil sets up the game on his own pages. He signs in with a code texted to his phone, so there's no password.");
         await s.GoInteractiveAsync("/games/new");
         await s.NoteAsync(s.Page.Locator("section.card").First, "Create a game",
             "Singles or doubles, the date and time, and where. This one is doubles, two days from now, at Oak Park.");

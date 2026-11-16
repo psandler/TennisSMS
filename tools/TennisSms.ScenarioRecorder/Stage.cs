@@ -22,6 +22,8 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
     private const int NoteBaseMs = 1800;         // how long a note stays up: a base time...
     private const int NoteMsPerWord = 300;       // ...plus this per word (about 200 words a minute)
     private const int AfterNoteMs = 350;
+    private const int QuickGlideMs = 350;        // quick clicks (a run of JOIN taps)
+    private const int AfterQuickClickMs = 250;
 
     private double _x = 800, _y = 500; // where the pointer is (matches the overlay's starting point)
 
@@ -139,6 +141,17 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
         await page.WaitForTimeoutAsync(P(AfterClickMs));
     }
 
+    /// <summary>A fast click: a short glide, no outline, a brief pause. For runs of repeated clicks.</summary>
+    public async Task QuickClickAsync(ILocator target)
+    {
+        await target.ScrollIntoViewIfNeededAsync();
+        var box = await target.BoundingBoxAsync() ?? throw new InvalidOperationException("Element isn't visible.");
+        var (x, y) = ((float)(box.X + box.Width / 2), (float)(box.Y + box.Height / 2));
+        await GlideAsync(x, y, P(QuickGlideMs));
+        await page.Mouse.ClickAsync(x, y);
+        await page.WaitForTimeoutAsync(P(AfterQuickClickMs));
+    }
+
     /// <summary>Clicks into a field and types into it one key at a time, then leaves it (Blazor binds on change).</summary>
     public async Task TypeAsync(ILocator field, string text, int keyDelayMs = KeyDelayMs)
     {
@@ -152,10 +165,10 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
     public Task PauseAsync(int ms) => page.WaitForTimeoutAsync(P(ms));
 
     /// <summary>Moves the pointer to a point over a set time, easing in and out, like a hand on a mouse.</summary>
-    private async Task GlideAsync(float x, float y)
+    private async Task GlideAsync(float x, float y, int? durationMs = null)
     {
         var distance = Math.Sqrt(Math.Pow(x - _x, 2) + Math.Pow(y - _y, 2));
-        var duration = P((int)(GlideBaseMs + distance * GlideMsPerPx));
+        var duration = durationMs ?? P((int)(GlideBaseMs + distance * GlideMsPerPx));
         var (fromX, fromY) = (_x, _y);
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (clock.ElapsedMilliseconds < duration)
@@ -243,6 +256,26 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
         for (var i = 0; i < 120 && !await reset.IsEnabledAsync(); i++) await sim.WaitForTimeoutAsync(500);
     }
 
+    /// <summary>
+    /// Signs the organizer in on a separate page that isn't recorded, then gives the recorded page the
+    /// sign-in cookie. Do it before <see cref="ResetOffCameraAsync"/>, so the code text is wiped from the phone.
+    /// </summary>
+    public async Task SignInOffCameraAsync(string organizerPhone)
+    {
+        await using var context = await browser.NewContextAsync();
+        var login = await context.NewPageAsync();
+        await login.GotoAsync(Url("/login"));
+        await login.Locator("input[name=PhoneInput]").FillAsync(organizerPhone);
+        await login.GetByRole(AriaRole.Button, new() { Name = "Text me a code" }).ClickAsync();
+        await login.Locator("input[name=CodeInput]").FillAsync(await ReadLoginCodeAsync());
+        await login.GetByRole(AriaRole.Button, new() { Name = "Log in" }).ClickAsync();
+        await login.WaitForURLAsync(u => !u.Contains("/login"));
+
+        // Only the sign-in cookie, tied to the app's address (copying every cookie as-is can be refused).
+        var auth = (await context.CookiesAsync()).Single(c => c.Name == "tennissms.auth");
+        await page.Context.AddCookiesAsync([new Cookie { Name = auth.Name, Value = auth.Value, Url = baseUrl, HttpOnly = true }]);
+    }
+
     /// <summary>The newest login code on the organizer's phone, read in a separate page that isn't recorded.</summary>
     public async Task<string> ReadLoginCodeAsync()
     {
@@ -307,6 +340,7 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
             #rec-note.on { opacity: 1; transform: none; }
             #rec-note h3 { font-size: 24px; line-height: 1.25; margin: 0 0 8px; }
             #rec-note p { margin: 0; color: #334155; }
+            article.phone.unknown { display: none !important; } /* the stranger's phone isn't part of the tour */
             #rec-badge { position: fixed; top: 12px; right: 14px; z-index: 2147483644; pointer-events: none;
               background: #111827; color: #fff; font: 600 14px/1 system-ui, sans-serif; padding: 7px 12px; border-radius: 999px;
               box-shadow: 0 2px 8px rgba(0,0,0,.25); }
