@@ -105,10 +105,10 @@ sealed class Tour(Stage s)
         await s.TitleCardAsync("The organizer", "Phil sets up the game on his own pages. He signs in with a code texted to his phone, so there's no password.");
         await s.GoInteractiveAsync("/games/new");
         await s.NoteAsync(s.Page.Locator("section.card").First, "Create a game",
-            "Singles or doubles, the date and time, and where. This one is doubles, two days from now, at Oak Park.");
+            "Singles or doubles, the date and time, and where. This one is doubles, two days from now, at Midtown Court 12.");
         var date = DateTime.Today.AddDays(2).ToString("yyyy-MM-dd");
         await s.Page.Locator("input[type=date]").FillAsync(date);
-        await s.TypeAsync(s.Page.Locator("input.wide"), "Oak Park courts");
+        await s.TypeAsync(s.Page.Locator("input.wide"), "Midtown Court 12");
 
         await s.NoteAsync(s.Page.Locator("table.list.compact"), "Who's playing",
             "Every player who has signed up. Phil marks himself as playing, and invites four players for the other three spots.");
