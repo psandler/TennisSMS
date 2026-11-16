@@ -51,8 +51,9 @@ Next to the phones, the page shows:
 
 ## Record the scenarios as videos
 
-`tools/TennisSms.ScenarioRecorder` uses Playwright to record a guided `tour` of the app as a video (about 4 minutes). Every step is a visible click, with a drawn pointer, click ripples, spotlights, captions and title cards. The tour covers:
-- players opting in, and the organizer signing in and creating a game;
+`tools/TennisSms.ScenarioRecorder` uses Playwright to record a guided `tour` of the app as a video. Every step is a visible click with a drawn pointer. The action pauses for explanatory notes beside what they describe, and title cards mark each section. The tour covers:
+- the phone simulator explained, and players signing up by texting JOIN;
+- the organizer signing in and creating a game;
 - players replying by text and by tapping their link;
 - the can't-fill alert, then two more invited: one takes the spot and the other is told it filled;
 - a player dropping out, the organizer's options (re-invite or invite someone new), and the refill;
@@ -70,8 +71,8 @@ dotnet run --project tools/TennisSms.ScenarioRecorder
 - Videos go to `recordings/` (git-ignored) as `<name>-<yyyy-MM-dd-HHmm>.webm`, so earlier takes are kept.
 - The first run downloads Playwright's Chromium and FFmpeg (a few hundred MB, kept in `%LOCALAPPDATA%\ms-playwright`).
 - Options (after `--`):
-  - `--list`: what can be recorded. Name some to record only those, e.g. `tour`.
-  - `--pace 1.3`: stretch every pause, pointer glide and typing delay (1 = normal, 1.5 = slower, 0.8 = faster). Per-step timings and all caption text are in `Tour.cs`; the overall feel settings are at the top of `Stage.cs`.
+  - `--list`: what can be recorded. Name some to record only those, e.g. `opening` (just the tour's first section, for quick reviews).
+  - `--pace 1.3`: stretch every pause, note, pointer glide and typing delay (1 = normal, 1.5 = slower, 0.8 = faster). All note text is in `Tour.cs`; the overall feel settings (including how long notes stay up per word) are at the top of `Stage.cs`.
   - `--mp4`: also save an `.mp4` (H.264) copy. Use it for sharing: WebM doesn't play everywhere (iPhone, Mac, PowerPoint, many chat apps). Needs ffmpeg on the PATH (`winget install Gyan.FFmpeg`); Playwright's own copy can't write MP4.
   - `--headed` shows the browser; `--url` and `--out` change the app address and output folder.
 

@@ -82,6 +82,8 @@ sealed class Recorder(IBrowser browser, string baseUrl, string outDir, double pa
     [
         new("tour", "A guided tour: players opt in, the organizer creates a game, replies by text and by link, alerts, a drop and a refill, a reminder",
             stage => new Tour(stage).RunAsync()),
+        new("opening", "Just the tour's opening (the simulator explained, players signing up), for quick reviews",
+            stage => new Tour(stage).OpeningAsync()),
     ];
 
     public async Task<string> RecordAsync(Recording recording)
