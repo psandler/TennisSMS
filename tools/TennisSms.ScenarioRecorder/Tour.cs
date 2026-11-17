@@ -27,7 +27,6 @@ sealed class Tour(Stage s)
         await DropOutAsync();
         await OrganizerOptionsAsync();
         await RefillAsync();
-        await ReminderAsync();
         await WrapUpAsync();
     }
 
@@ -52,17 +51,17 @@ sealed class Tour(Stage s)
 
     private async Task ExplainSimulatorAsync()
     {
-        await s.NoteAsync(null, "This is the Tennis SMS demo",
-            "This page, the phone simulator, is used to test and visualize SMS workflows in development (only). We will use it to take a tour of the main workflows of Tennis SMS");
+        await s.NoteAsync(null, "This is the TennisSMS demo",
+            "This page, the phone simulator, is used to test and visualize SMS workflows in development only. We'll use it to take a tour of the main workflows of TennisSMS.");
 
         await s.NoteAsync(s.Page.Locator("section.phones"), "Each box represents a cell phone with a fake number",
             "One for each player, plus the organizer. Each one texts back and forth with the app's phone number, as a real phone would.");
 
         await s.NoteAsync(s.Phone("Phil"), "Phil is the organizer",
-            "He sets up games and gets the organizer texts/alerts about his games. He has already opted-in.");
+            "He sets up games and gets the organizer texts and alerts about his games. He has already opted in.");
 
         await s.NoteAsync(s.Phone("Hyo").Locator(".phone-head"), "A player: Hyo",
-            "Her name and (fake) number, and her opt-in status. Phil has already added her, but she's \"Pending\": she can't be invited or added to a match until she texts JOIN.");
+            "Her name and (fake) number, and her opt-in status. Phil has already added her, but she's \"Pending\": she can't be invited or added to a game until she texts JOIN.");
 
         await s.NoteAsync(s.Phone("Hyo").Locator(".thread"), "The conversation",
             "Texts between Hyo and the app show up here. Empty for now. Newest at the bottom.");
@@ -87,7 +86,7 @@ sealed class Tour(Stage s)
         await s.WaitForMessageAsync("Jim", "signed up");
         await s.PauseAsync(800);
         await s.NoteAsync(s.Phone("Jim"), "Same result for Jim",
-            "Same JOIN text, same reply--just a shortcut for the simulator and demo.");
+            "Same JOIN text, same reply. It's just a shortcut for the simulator and demo.");
 
         await s.NoteAsync(null, "Now everyone else signs up", "The same JOIN shortcut, on each of the other phones.");
         foreach (var name in new[] { "Michael", "Mike", "Ben", "Nick", "Jed" })
@@ -261,18 +260,6 @@ sealed class Tour(Stage s)
             "He takes the spot and gets \"Game on\". Jed is told it filled.");
         await s.WaitForMessageAsync("Michael", "Game on", after: gameOn);
         await TextNoteAsync("Phil", "is full", "Full again", "The others get the new roster, and Phil gets one text. All good.", after: full);
-    }
-
-    private async Task ReminderAsync()
-    {
-        await s.TitleCardAsync("The night before", "A reminder goes to everyone playing.");
-        var timers = s.Page.Locator("table.timers");
-        await s.NoteAsync(timers, "Timers",
-            "Each game has timers: a reminder at 7pm the evening before, and more. They run on real time. This demo can't wait two days, so it fires the reminder now.");
-        var reminder = s.Page.Locator("table.timers tr", new() { Has = s.Page.Locator("td", new() { HasTextRegex = new Regex("^Reminder$") }) });
-        await s.ClickAsync(reminder.GetByRole(AriaRole.Button, new() { Name = "Fire now" }), "Fire the reminder");
-        await TextNoteAsync("Michael", "Reminder", "The reminder",
-            "Who's playing, when and where. Everyone playing gets one.");
     }
 
     private async Task WrapUpAsync()

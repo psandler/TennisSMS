@@ -56,10 +56,9 @@ Next to the phones, the page shows:
 - the organizer creating a game (the recorder signs in off camera);
 - players replying by text and by tapping their link;
 - the can't-fill alert, then two more invited: one takes the spot and the other is told it filled;
-- a player dropping out, the organizer's options (re-invite or invite someone new), and the refill;
-- a reminder.
+- a player dropping out, the organizer's options (re-invite or invite someone new), and the refill.
 
-The script is `Tour.cs`; new recordings go in their own files and are listed in `Recorder.Available`.
+The script is `Tour.cs`; new recordings go in their own files and are listed in `Recorder.Available`. `samples` (`Samples.cs`) is a short reel of presentation ideas not yet in the tour: a clean phones-only layout, close-ups of texts, a camera zoom, the organizer's page side by side with the phones, and a voiceover (Windows text to speech, mixed into the MP4 only, so use `--mp4`).
 
 **Every recording resets the dev database.**
 

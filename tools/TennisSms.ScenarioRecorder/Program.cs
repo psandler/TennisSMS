@@ -59,10 +59,12 @@ Directory.CreateDirectory(outDir);
 foreach (var recording in selected)
 {
     Console.WriteLine($"Recording '{recording.Name}'...");
-    var file = await recorder.RecordAsync(recording);
+    var (file, clips) = await recorder.RecordAsync(recording);
     Console.WriteLine($"  saved {file}");
     if (ffmpeg is not null)
-        Console.WriteLine($"  saved {await Mp4.ConvertAsync(ffmpeg, file)}");
+        Console.WriteLine($"  saved {await Mp4.ConvertAsync(ffmpeg, file, clips)}{(clips.Count > 0 ? $" (with {clips.Count} voice clips)" : "")}");
+    else if (clips.Count > 0)
+        Console.WriteLine("  (this recording has a voiceover; add --mp4 to get it, the WebM is silent)");
 }
 
 try { Directory.Delete(Path.Combine(outDir, ".tmp"), recursive: true); } catch (IOException) { }
@@ -84,9 +86,11 @@ sealed class Recorder(IBrowser browser, string baseUrl, string outDir, double pa
             stage => new Tour(stage).RunAsync()),
         new("opening", "Just the tour's opening (the simulator explained, players signing up), for quick reviews",
             stage => new Tour(stage).OpeningAsync()),
+        new("samples", "Short samples of presentation ideas: clean layout, close-ups, camera zoom, side by side, voiceover (use --mp4 to hear it)",
+            stage => new Samples(stage).RunAsync()),
     ];
 
-    public async Task<string> RecordAsync(Recording recording)
+    public async Task<(string File, IReadOnlyList<VoiceClip> Clips)> RecordAsync(Recording recording)
     {
         var videoTemp = Path.Combine(outDir, ".tmp");
         await using var context = await browser.NewContextAsync(new()
@@ -97,7 +101,10 @@ sealed class Recorder(IBrowser browser, string baseUrl, string outDir, double pa
         });
         await context.AddInitScriptAsync(Stage.OverlayScript);
         var page = await context.NewPageAsync();
-        var stage = new Stage(page, browser, baseUrl, pace);
+        var stage = new Stage(page, browser, baseUrl, pace)
+        {
+            Voice = new Narrator(Path.Combine(videoTemp, $"voice-{Slug(recording.Name)}")),
+        };
 
         await recording.Play(stage);
 
@@ -107,7 +114,7 @@ sealed class Recorder(IBrowser browser, string baseUrl, string outDir, double pa
         await context.CloseAsync(); // the video is finished when the context closes
         await video.SaveAsAsync(target);
         await video.DeleteAsync();
-        return target;
+        return (target, stage.Clips);
     }
 
     private static string Slug(string name) =>
@@ -175,13 +182,24 @@ static class Mp4
         return null;
     }
 
-    public static async Task<string> ConvertAsync(string ffmpeg, string webm)
+    public static async Task<string> ConvertAsync(string ffmpeg, string webm, IReadOnlyList<VoiceClip> clips)
     {
         var mp4 = Path.ChangeExtension(webm, ".mp4");
         // CRF 20 / slow: visually close to the source and much smaller. yuv420p and faststart for broad playback and streaming.
-        using var process = Process.Start(new ProcessStartInfo(ffmpeg,
-            ["-loglevel", "error", "-y", "-i", webm, "-c:v", "libx264", "-preset", "slow", "-crf", "20",
-             "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", mp4])
+        List<string> args = ["-loglevel", "error", "-y", "-i", webm];
+        foreach (var c in clips) args.AddRange(["-i", c.Wav]);
+        args.AddRange(["-c:v", "libx264", "-preset", "slow", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart"]);
+        if (clips.Count == 0) args.Add("-an");
+        else
+        {
+            // Each clip delayed to its moment, then all mixed into one track (without lowering their volume).
+            var delays = string.Concat(clips.Select((c, i) => $"[{i + 1}:a]adelay={c.AtMs}|{c.AtMs}[a{i}];"));
+            var inputs = string.Concat(clips.Select((_, i) => $"[a{i}]"));
+            args.AddRange(["-filter_complex", $"{delays}{inputs}amix=inputs={clips.Count}:normalize=0[voice]",
+                           "-map", "0:v", "-map", "[voice]", "-c:a", "aac", "-b:a", "160k"]);
+        }
+        args.Add(mp4);
+        using var process = Process.Start(new ProcessStartInfo(ffmpeg, args)
         {
             RedirectStandardError = true,
             UseShellExecute = false,

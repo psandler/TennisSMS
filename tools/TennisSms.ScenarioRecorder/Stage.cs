@@ -26,6 +26,17 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
     private const int AfterQuickClickMs = 250;
 
     private double _x = 800, _y = 500; // where the pointer is (matches the overlay's starting point)
+    private Cookie? _auth;
+    private bool _zoomed;              // while the camera is zoomed in, nothing scrolls             // the organizer's sign-in, once SignInOffCameraAsync has run
+
+    /// <summary>Text to speech for voiceovers. Null: notes are silent.</summary>
+    public Narrator? Voice { get; set; }
+
+    /// <summary>Time since the page (and so the video) started, to place voice clips.</summary>
+    public System.Diagnostics.Stopwatch Clock { get; } = System.Diagnostics.Stopwatch.StartNew();
+
+    /// <summary>Voice clips spoken so far, with where they start in the video. Mixed into the MP4.</summary>
+    public List<VoiceClip> Clips { get; } = [];
 
     /// <summary>Scales a presentation delay by --pace. Waits for the app itself (page loads, texts arriving) aren't scaled.</summary>
     private int P(int ms) => (int)Math.Round(ms * pace);
@@ -65,17 +76,27 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
     /// note beside it, for long enough to read (or <paramref name="ms"/>). With no target, the note is centered.
     /// A locator that matches several elements rings them all with one outline.
     /// </summary>
-    public async Task NoteAsync(ILocator? target, string title, string body = "", int? ms = null)
+    /// <para><paramref name="closeUp"/> also shows the target (a text, say) enlarged inside the note.
+    /// <paramref name="say"/> is spoken as a voiceover while the note is up, and the note stays until it's done.</para>
+    public async Task NoteAsync(ILocator? target, string title, string body = "", int? ms = null, bool closeUp = false, string? say = null)
     {
+        var clip = say is not null && Voice is not null ? await Voice.GetAsync(say) : null;
+        var args = new object[] { title, body, closeUp };
         if (target is not null)
         {
             await CenterAsync(target.First);
-            await target.EvaluateAllAsync<object?>("(els, a) => { window.__rec.note(els, a[0], a[1]); return null; }", new[] { title, body });
+            await target.EvaluateAllAsync<object?>("(els, a) => { window.__rec.note(els, a[0], a[1], a[2]); return null; }", args);
         }
-        else await page.EvaluateAsync("a => window.__rec.note(null, a[0], a[1])", new[] { title, body });
+        else await page.EvaluateAsync("a => window.__rec.note(null, a[0], a[1], a[2])", args);
 
         var words = (title + " " + body).Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-        await page.WaitForTimeoutAsync(P(ms ?? NoteBaseMs + words * NoteMsPerWord));
+        var readMs = P(ms ?? NoteBaseMs + words * NoteMsPerWord);
+        if (clip is not null)
+        {
+            Clips.Add(new VoiceClip((int)Clock.ElapsedMilliseconds + 300, clip.Path));
+            readMs = Math.Max(readMs, clip.Ms + 900);
+        }
+        await page.WaitForTimeoutAsync(readMs);
         await page.EvaluateAsync("() => window.__rec.note(false)");
         await page.WaitForTimeoutAsync(P(AfterNoteMs));
     }
@@ -185,6 +206,7 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
     /// <summary>Scrolls the element to the middle of the window, so its spotlight and label are fully on screen.</summary>
     private async Task CenterAsync(ILocator target)
     {
+        if (_zoomed) return;
         await target.EvaluateAsync("el => el.scrollIntoView({ block: el.offsetHeight > window.innerHeight - 120 ? 'start' : 'center', inline: 'nearest' })");
         await page.WaitForTimeoutAsync(P(ScrollSettleMs));
     }
@@ -273,7 +295,8 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
 
         // Only the sign-in cookie, tied to the app's address (copying every cookie as-is can be refused).
         var auth = (await context.CookiesAsync()).Single(c => c.Name == "tennissms.auth");
-        await page.Context.AddCookiesAsync([new Cookie { Name = auth.Name, Value = auth.Value, Url = baseUrl, HttpOnly = true }]);
+        _auth = new Cookie { Name = auth.Name, Value = auth.Value, Url = baseUrl, HttpOnly = true };
+        await page.Context.AddCookiesAsync([_auth]);
     }
 
     /// <summary>The newest login code on the organizer's phone, read in a separate page that isn't recorded.</summary>
@@ -292,6 +315,63 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
         throw new InvalidOperationException("No login code arrived on the organizer phone.");
     }
 
+    /// <summary>Speaks a line over whatever is on screen. With <paramref name="wait"/>, waits until it's finished.</summary>
+    public async Task SayAsync(string text, bool wait = false)
+    {
+        if (Voice is null) return;
+        var clip = await Voice.GetAsync(text);
+        Clips.Add(new VoiceClip((int)Clock.ElapsedMilliseconds, clip.Path));
+        if (wait) await page.WaitForTimeoutAsync(clip.Ms + 300);
+    }
+
+    /// <summary>Recording-only simulator layout: just the phones, bigger. Stays on across page loads.</summary>
+    public async Task CleanLayoutAsync(bool on = true)
+    {
+        await page.EvaluateAsync("on => window.__rec.clean(on)", on);
+        await page.WaitForTimeoutAsync(P(400));
+    }
+
+    /// <summary>
+    /// Side by side: the simulator on the left, showing only <paramref name="phones"/>, and an app page
+    /// (say, the organizer's game page) live on the right. Null turns it off.
+    /// </summary>
+    public async Task SplitAsync(string? path, params string[] phones)
+    {
+        await page.EvaluateAsync("a => window.__rec.split(a[0], a[1])", new object?[] { path is null ? null : Url(path), phones });
+        if (path is not null)
+        {
+            await page.FrameLocator("#rec-split").Locator("body").WaitForAsync();
+            await page.WaitForTimeoutAsync(2500); // the page inside goes live once its Blazor circuit connects
+        }
+    }
+
+    /// <summary>The right-hand page in side by side, as one element (for notes).</summary>
+    public ILocator SplitPane => page.Locator("#rec-split");
+
+    /// <summary>Camera zoom: the page scales up around the element, as if the camera moved in.</summary>
+    public async Task ZoomAsync(ILocator target, double scale = 1.8)
+    {
+        await CenterAsync(target);
+        await target.EvaluateAsync("(el, s) => window.__rec.zoom(el, s)", scale);
+        _zoomed = true;
+        await page.WaitForTimeoutAsync(P(1100));
+    }
+
+    public async Task ZoomOutAsync()
+    {
+        await page.EvaluateAsync("() => window.__rec.zoom(null)");
+        _zoomed = false;
+        await page.WaitForTimeoutAsync(P(1100));
+    }
+
+    /// <summary>Runs something in a separate page that isn't recorded, signed in as the organizer if that's been done.</summary>
+    public async Task<T> OffCameraAsync<T>(Func<IPage, Task<T>> work)
+    {
+        await using var context = await browser.NewContextAsync();
+        if (_auth is not null) await context.AddCookiesAsync([_auth]);
+        return await work(await context.NewPageAsync());
+    }
+
     /// <summary>Shows a text as a phone notification on top of the current page.</summary>
     public async Task NotificationAsync(string from, string body, int ms = 3500)
     {
@@ -303,7 +383,7 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
     /// <summary>Installed on every page of the recording context.</summary>
     public const string OverlayScript = """
         (() => {
-          if (window.__rec) return;
+          if (window.__rec || window !== window.top) return; // not inside the side-by-side frame
           const css = `
             #rec-pointer { position: fixed; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%;
               background: rgba(245, 158, 11, .85); border: 2px solid #fff; box-shadow: 0 0 0 2px rgba(0,0,0,.35);
@@ -341,6 +421,22 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
             #rec-note h3 { font-size: 24px; line-height: 1.25; margin: 0 0 8px; }
             #rec-note p { margin: 0; color: #334155; }
             article.phone.unknown { display: none !important; } /* the stranger's phone isn't part of the tour */
+            #rec-note.closeup { width: auto; max-width: 720px; }
+            .rec-closeup { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; padding: 14px; background: #f4f6f8;
+              border-radius: 10px; zoom: 1.7; }
+            .rec-closeup > * { max-width: none !important; margin: 0 !important; }
+            /* Clean layout: only the phones, bigger */
+            html.rec-clean .sim-bar, html.rec-clean aside.side, html.rec-clean .phone .auto, html.rec-clean .msg .meta { display: none !important; }
+            html.rec-clean .sim-body { grid-template-columns: minmax(0, 1fr) !important; margin-top: 0 !important; }
+            html.rec-clean .phones { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 14px !important; }
+            html.rec-clean .msg { font-size: 15px !important; }
+            html.rec-clean .thread { height: 300px !important; }
+            /* Side by side: phones on the left, an app page on the right */
+            html.rec-split body { width: 54vw !important; overflow-x: hidden !important; }
+            html.rec-split .phones { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+            #rec-split { position: fixed; top: 0; right: 0; width: 46vw; height: 100vh; border: 0; border-left: 4px solid #111827;
+              background: #fff; z-index: 2147483630; }
+            .rec-zoomed { transition: transform .9s cubic-bezier(.65, 0, .35, 1) !important; }
             #rec-badge { position: fixed; top: 12px; right: 14px; z-index: 2147483644; pointer-events: none;
               background: #111827; color: #fff; font: 600 14px/1 system-ui, sans-serif; padding: 7px 12px; border-radius: 999px;
               box-shadow: 0 2px 8px rgba(0,0,0,.25); }
@@ -348,7 +444,26 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
             #rec-toast.on { transform: none; } #rec-toast b { display: block; font-size: 13px; color: #64748b; margin-bottom: 4px; }
           `;
           const ready = (fn) => document.body ? fn() : document.addEventListener('DOMContentLoaded', fn);
-          let pointer, spot, caption, card, toast, badge, noteDim, noteRing, note;
+          let pointer, spot, caption, card, toast, badge, noteDim, noteRing, note, splitFrame, splitStyle;
+          // Layout modes survive page loads (sessionStorage), and are re-applied if the app re-renders.
+          const applyLayout = () => {
+            const html = document.documentElement;
+            html.classList.toggle('rec-clean', sessionStorage.getItem('rec-clean') === '1');
+            const split = JSON.parse(sessionStorage.getItem('rec-split') || 'null');
+            html.classList.toggle('rec-split', !!split);
+            if (!split) { splitFrame?.remove(); splitFrame = null; splitStyle?.remove(); splitStyle = null; return; }
+            if (!splitFrame) {
+              splitFrame = document.createElement('iframe'); splitFrame.id = 'rec-split'; splitFrame.src = split.url;
+              document.body.appendChild(splitFrame);
+            }
+            if (!splitStyle) { splitStyle = document.createElement('style'); splitStyle.id = 'rec-split-style'; document.head.appendChild(splitStyle); }
+            // Hide every phone not named, by position (the app re-renders the phones, so classes on them don't last).
+            const names = [...document.querySelectorAll('.phones > article.phone .phone-head strong')]
+              .map(s => s.textContent.replace(' (organizer)', '').trim());
+            const rules = names.map((n, i) => split.phones.includes(n) ? '' :
+              `html.rec-split .phones > article.phone:nth-child(${i + 1}) { display: none !important; }`).join('\n');
+            if (splitStyle.textContent !== rules) splitStyle.textContent = rules;
+          };
           const pos = JSON.parse(sessionStorage.getItem('rec-pos') || '[800, 500]');
 
           ready(() => {
@@ -360,14 +475,16 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
             if (last) { const [t, d] = JSON.parse(last); window.__rec.caption(t, d); }
             const b = sessionStorage.getItem('rec-badge');
             if (b) window.__rec.badge(b);
+            applyLayout();
           });
 
           // Blazor's enhanced navigation patches the page without reloading, which can drop
           // elements it didn't render. Put ours back if that happens.
           setInterval(() => {
             if (!document.body) return;
-            for (const el of [pointer, caption, spot, card, toast, badge, noteDim, noteRing, note])
+            for (const el of [pointer, caption, spot, card, toast, badge, noteDim, noteRing, note, splitFrame])
               if (el && !el.isConnected) document.body.appendChild(el);
+            applyLayout();
             if (!document.getElementById('rec-style')) {
               const s = document.createElement('style'); s.id = 'rec-style'; s.textContent = css; document.head.appendChild(s);
             }
@@ -426,7 +543,27 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
               if (rest.length) badge.append(' · ' + rest.join(' · '));
             },
             // A pause-and-explain note: dims the page, rings the element, and puts the note where there's room.
-            note(el, title, body) {
+            clean(on) { sessionStorage.setItem('rec-clean', on ? '1' : '0'); applyLayout(); },
+            split(url, phones) {
+              if (url) sessionStorage.setItem('rec-split', JSON.stringify({ url, phones: phones || [] }));
+              else sessionStorage.removeItem('rec-split');
+              applyLayout();
+            },
+            // Camera zoom: scale every page element (not ours) so the target's center moves to the middle of the window.
+            zoom(el, scale) {
+              const parts = [...document.body.children].filter(c => !c.id?.startsWith('rec-') && c.tagName !== 'SCRIPT');
+              // No scrolling while zoomed: the enlarged page would scroll sideways under the camera.
+              document.documentElement.style.overflow = el ? 'hidden' : '';
+              if (!el) { for (const c of parts) c.style.transform = ''; return; }
+              const r = el.getBoundingClientRect();
+              const px = r.left + r.width / 2, py = r.top + r.height / 2, cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+              for (const c of parts) {
+                const b = c.getBoundingClientRect();
+                c.classList.add('rec-zoomed'); c.style.transformOrigin = '0 0';
+                c.style.transform = `translate(${cx - b.left - scale * (px - b.left)}px, ${cy - b.top - scale * (py - b.top)}px) scale(${scale})`;
+              }
+            },
+            note(el, title, body, closeUp) {
               if (el === false) {
                 note?.classList.remove('on'); noteDim?.classList.remove('on');
                 const [n, r, d] = [note, noteRing, noteDim]; note = noteRing = noteDim = null;
@@ -436,6 +573,17 @@ sealed class Stage(IPage page, IBrowser browser, string baseUrl, double pace = 1
               note = document.createElement('div'); note.id = 'rec-note';
               note.innerHTML = '<h3></h3>' + (body ? '<p></p>' : '');
               note.firstChild.textContent = title; if (body) note.lastChild.textContent = body;
+              if (closeUp && el) {
+                // The texts themselves, copied and enlarged. Copies keep the app's own styling.
+                note.classList.add('closeup');
+                const box = document.createElement('div'); box.className = 'rec-closeup';
+                for (const e of [].concat(el)) {
+                  const copy = e.cloneNode(true); copy.style.width = e.getBoundingClientRect().width + 'px';
+                  copy.querySelectorAll('.meta').forEach(m => m.remove());
+                  box.appendChild(copy);
+                }
+                note.appendChild(box);
+              }
               document.body.appendChild(note);
               const W = window.innerWidth, H = window.innerHeight, gap = 18, m = 14;
               let left, top;
