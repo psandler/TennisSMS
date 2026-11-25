@@ -328,7 +328,7 @@ The simulator is a first-class part of v0.1, not a debugging extra. Goal: watch 
 
 **Availability.** Registered only when `SimulatorGateway` is active (§8.1); never deployed with the Twilio gateway. Route `/dev/simulator`, interactive server rendering so everything updates live.
 
-**Seed and reset.** A "Reset" control wipes the dev database and seeds 7 players with fake numbers (`+155501000xx`) and short names (Hyo, Jim, Michael, Mike, Ben, Nick, Jed), plus the organizer (Phil), who is already opted in. Seeded players start `Pending`; a "JOIN all" control opts them all in. A "Quick game" control creates a doubles game starting ~20 hours out (inside the cancellation window, so window logic is live) and invites everyone.
+**Seed and reset.** A "Reset" control wipes the dev database and seeds 7 players with fake numbers (`+155501000xx`) and short names (Kayla, Jeremy, George, Mike, Kevin, Steve, DJ), plus the organizer (Phil), who is already opted in. Seeded players start `Pending`; a "JOIN all" control opts them all in. A "Quick game" control creates a doubles game starting ~20 hours out (inside the cancellation window, so window logic is live) and invites everyone.
 
 **Phone grid.** The organizer phone first (top left), then one card per player phone (7), then one "unknown number" phone. Each card shows:
 - Name, number, and consent status badge.

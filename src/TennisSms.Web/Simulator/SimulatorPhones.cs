@@ -13,13 +13,13 @@ public static class SimulatorPhones
     /// <summary>The 7 seeded players. Numbers are in the 555-01xx fictional range.</summary>
     public static readonly IReadOnlyList<SimPhone> Players =
     [
-        new("+15550100011", "Hyo", SimPhoneKind.Player),
-        new("+15550100012", "Jim", SimPhoneKind.Player),
-        new("+15550100013", "Michael", SimPhoneKind.Player),
+        new("+15550100011", "Kayla", SimPhoneKind.Player),
+        new("+15550100012", "Jeremy", SimPhoneKind.Player),
+        new("+15550100013", "George", SimPhoneKind.Player),
         new("+15550100014", "Mike", SimPhoneKind.Player),
-        new("+15550100015", "Ben", SimPhoneKind.Player),
-        new("+15550100016", "Nick", SimPhoneKind.Player),
-        new("+15550100017", "Jed", SimPhoneKind.Player),
+        new("+15550100015", "Kevin", SimPhoneKind.Player),
+        new("+15550100016", "Steve", SimPhoneKind.Player),
+        new("+15550100017", "DJ", SimPhoneKind.Player),
     ];
 
     public static readonly SimPhone Unknown = new("+15550100099", "Unknown number", SimPhoneKind.Unknown);

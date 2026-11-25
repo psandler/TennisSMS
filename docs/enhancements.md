@@ -13,6 +13,7 @@ Each entry says what the idea is, why it's wanted, a rough shape, and the questi
 | E-5 | Carried over from v0.1's out-of-scope list | Known |
 | E-6 | Can't-fill alert | **Built** in v0.1 (spec §5) |
 | E-7 | Testcontainers for the integration tests | Idea; do it with CI |
+| E-8 | Guests: players who aren't in the system | Idea |
 
 ## E-1. Flexible player counts (min and max)
 
@@ -155,5 +156,26 @@ Example: a doubles game with four invited. Two say YES, one says NO, and one has
 **Open questions.**
 - Should Testcontainers be the default for local test runs too, or only when no instance is configured?
 - Keep the installed-instance path at all, once CI exists?
+
+## E-8. Guests: players who aren't in the system
+
+**Idea.** The organizer adds someone to a game as playing without them being a player in the system: just a name, with no phone number and no texts. For example, a friend brought along by a regular, a visitor, or someone the organizer arranged with in person.
+
+**Why.** Today everyone in a game must be a player who has opted in by texting JOIN. Without guests, the organizer either leaves a spot showing as open (and the app keeps treating the game as not full) or has to register a phone number for someone who will never use the service.
+
+**Rough shape.**
+- A guest belongs to the game, not the player list: an event on the game stream, for example `GuestAdded(GuestId, Name)` and `GuestRemoved(GuestId)`. No `Player` record, so no phone number, no consent and no unique-phone rule.
+- A guest takes a spot like a confirmed player. They count toward full, toward the shortfall (E-6) and toward the not-full alert. Adding the last guest can fill the game, which sends "Game on" to the players as today.
+- Guests appear in rosters by name: on the organizer's game page, on players' game pages, and in the texts that list who's playing ("Game on: Phil, Kayla, George, Sam").
+- Nothing is ever sent to a guest: no invitation, no "Game on", no reminder. They can't reply, so they never drop by themselves. Only the organizer removes them.
+- Removing a guest opens a spot, like removing a player. Probably no text to the organizer, since they did it.
+- On the game page: an "Add a guest" field next to the roster picker, with the same name rules as players (at most 12 characters, GSM-7).
+
+**Open questions.**
+- Mark guests in texts and on the pages, for example "Sam (guest)"? That's clearer, but takes room in texts.
+- Can a player bring a guest by text, such as "YES +1"? That's much bigger: parsing, and who the guest is.
+- If a guest later joins for real, is there a way to turn the guest into that player in past games? Probably not worth it.
+- Should the organizer's recent guests be offered again on the next game (a short list of names), or typed each time?
+- Is a guest's name personal data to delete with the game, or kept with the game history like everything else?
 
 Not an enhancement but still to do: the **Twilio integration** (spec §13). It's part of v0.2 ([spec-v0.2.md](spec-v0.2.md) §10).

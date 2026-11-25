@@ -6,8 +6,8 @@ using Microsoft.Playwright;
 /// players' phones in the simulator, and one player's own game page (via the link in their text).
 /// No auto-replies, so the order and timing are always the same.
 ///
-/// Cast: Phil (organizer, playing). Invited: Hyo, Jim, Michael, Mike. Then Ben and Nick.
-/// Hyo drops out later; Nick is re-invited and Jed invited; Nick takes the spot.
+/// Cast: Phil (organizer, playing). Invited: Kayla, Jeremy, George, Mike. Then Kevin and Steve.
+/// Kayla drops out later; Steve is re-invited and DJ invited; Steve takes the spot.
 /// </summary>
 sealed class Tour(Stage s)
 {
@@ -60,39 +60,39 @@ sealed class Tour(Stage s)
         await s.NoteAsync(s.Phone("Phil"), "Phil is the organizer",
             "He sets up games and gets the organizer texts and alerts about his games. He has already opted in.");
 
-        await s.NoteAsync(s.Phone("Hyo").Locator(".phone-head"), "A player: Hyo",
+        await s.NoteAsync(s.Phone("Kayla").Locator(".phone-head"), "A player: Kayla",
             "Her name and (fake) number, and her opt-in status. Phil has already added her, but she's \"Pending\": she can't be invited or added to a game until she texts JOIN.");
 
-        await s.NoteAsync(s.Phone("Hyo").Locator(".thread"), "The conversation",
-            "Texts between Hyo and the app show up here. Empty for now. Newest at the bottom.");
+        await s.NoteAsync(s.Phone("Kayla").Locator(".thread"), "The conversation",
+            "Texts between Kayla and the app show up here. Empty for now. Newest at the bottom.");
     }
 
     private async Task PlayersJoinAsync()
     {
-        await s.NoteAsync(s.Phone("Hyo").Locator("form.free"), "Texting from a phone",
-            "In a simulated phone, a tester can type here and press Send, just like texting on a real phone. Hyo signs up by texting the word JOIN.");
-        await s.TypeAsync(s.Phone("Hyo").Locator("form.free input"), "join", 220);
-        await s.ClickAsync(s.Phone("Hyo").Locator("form.free").GetByRole(AriaRole.Button, new() { Name = "Send" }), "Send");
-        await s.WaitForMessageAsync("Hyo", "signed up");
+        await s.NoteAsync(s.Phone("Kayla").Locator("form.free"), "Texting from a phone",
+            "In a simulated phone, a tester can type here and press Send, just like texting on a real phone. Kayla signs up by texting the word JOIN.");
+        await s.TypeAsync(s.Phone("Kayla").Locator("form.free input"), "join", 220);
+        await s.ClickAsync(s.Phone("Kayla").Locator("form.free").GetByRole(AriaRole.Button, new() { Name = "Send" }), "Send");
+        await s.WaitForMessageAsync("Kayla", "signed up");
         await s.PauseAsync(800);
-        await s.NoteAsync(s.Phone("Hyo").Locator(".thread"), "The app answers",
-            "Hyo's text is on the right, the app's reply on the left. She's signed up, and the reply tells her how to stop.");
-        await s.NoteAsync(s.Phone("Hyo").Locator(".phone-head"), "Hyo is in",
+        await s.NoteAsync(s.Phone("Kayla").Locator(".thread"), "The app answers",
+            "Kayla's text is on the right, the app's reply on the left. She's signed up, and the reply tells her how to stop.");
+        await s.NoteAsync(s.Phone("Kayla").Locator(".phone-head"), "Kayla is in",
             "Her status is now \"OptedIn\". From now on she can be invited to games.");
 
-        await s.NoteAsync(s.Phone("Jim").Locator(".quick"), "Shortcuts",
+        await s.NoteAsync(s.Phone("Jeremy").Locator(".quick"), "Shortcuts",
             "These buttons act as single-click shortcuts. They're the words players use: YES, NO, OUT, JOIN, STOP, HELP.");
-        await s.ClickAsync(s.PhoneButton("Jim", "JOIN"), "Jim texts JOIN");
-        await s.WaitForMessageAsync("Jim", "signed up");
+        await s.ClickAsync(s.PhoneButton("Jeremy", "JOIN"), "Jeremy texts JOIN");
+        await s.WaitForMessageAsync("Jeremy", "signed up");
         await s.PauseAsync(800);
-        await s.NoteAsync(s.Phone("Jim"), "Same result for Jim",
+        await s.NoteAsync(s.Phone("Jeremy"), "Same result for Jeremy",
             "Same JOIN text, same reply. It's just a shortcut for the simulator and demo.");
 
         await s.NoteAsync(null, "Now everyone else signs up", "The same JOIN shortcut, on each of the other phones.");
-        foreach (var name in new[] { "Michael", "Mike", "Ben", "Nick", "Jed" })
+        foreach (var name in new[] { "George", "Mike", "Kevin", "Steve", "DJ" })
             await s.QuickClickAsync(s.PhoneButton(name, "JOIN"));
         await s.WaitUntilQuietAsync();
-        await s.WaitForMessageAsync("Jed", "signed up");
+        await s.WaitForMessageAsync("DJ", "signed up");
         await s.NoteAsync(s.Page.Locator("section.phones"), "Everyone has signed up",
             "Seven players texted JOIN, and all seven are OptedIn. Now Phil can set up a game.");
     }
@@ -112,7 +112,7 @@ sealed class Tour(Stage s)
         await s.NoteAsync(s.Page.Locator("table.list.compact"), "Who's playing",
             "Every player who has signed up. Phil marks himself as playing, and invites four players for the other three spots.");
         await s.ClickAsync(RosterButton("Phil", "Playing"), "Phil is playing");
-        foreach (var name in new[] { "Hyo", "Jim", "Michael", "Mike" })
+        foreach (var name in new[] { "Kayla", "Jeremy", "George", "Mike" })
             await s.ClickAsync(RosterButton(name, "Invite"));
         await s.PauseAsync(600);
 
@@ -130,33 +130,33 @@ sealed class Tour(Stage s)
     {
         await s.TitleCardAsync("The players", "Each invited player gets one text. They answer YES or NO, or tap their link.");
         await s.GoInteractiveAsync("/dev/simulator");
-        await TextNoteAsync("Hyo", "Reply YES or NO", "The invitation",
-            "Date, time and place, how many spots are open, and a link to Hyo's own page for this game. Jim, Michael and Mike got the same.");
+        await TextNoteAsync("Kayla", "Reply YES or NO", "The invitation",
+            "Date, time and place, how many spots are open, and a link to Kayla's own page for this game. Jeremy, George and Mike got the same.");
     }
 
     private async Task RepliesByTextAsync()
     {
-        await s.NoteAsync(s.PhoneButton("Hyo", "YES"), "Hyo texts YES", "The YES button sends the text \"YES\", as if she typed it.");
-        await s.ClickAsync(s.PhoneButton("Hyo", "YES"), "Hyo: YES");
-        await TextNoteAsync("Hyo", "You're in", "She's in",
+        await s.NoteAsync(s.PhoneButton("Kayla", "YES"), "Kayla texts YES", "The YES button sends the text \"YES\", as if she typed it.");
+        await s.ClickAsync(s.PhoneButton("Kayla", "YES"), "Kayla: YES");
+        await TextNoteAsync("Kayla", "You're in", "She's in",
             "The reply confirms it, lists who's playing, and says how many spots are left.");
 
-        await s.ClickAsync(s.PhoneButton("Jim", "NO"), "Jim: NO");
-        await TextNoteAsync("Jim", "Got it", "Jim texts NO",
+        await s.ClickAsync(s.PhoneButton("Jeremy", "NO"), "Jeremy: NO");
+        await TextNoteAsync("Jeremy", "Got it", "Jeremy texts NO",
             "A short thank-you. He won't be asked about this game again.");
     }
 
     private async Task ReplyByLinkAsync()
     {
-        var link = (await s.WaitForMessageAsync("Michael", "Reply YES or NO")).Locator("a[href*='/g/']");
-        await s.NoteAsync(link, "Michael taps the link instead",
+        var link = (await s.WaitForMessageAsync("George", "Reply YES or NO")).Locator("a[href*='/g/']");
+        await s.NoteAsync(link, "George taps the link instead",
             "Every invitation has a link to the player's own page for the game. No app to install and no login.");
         await link.EvaluateAsync("a => a.removeAttribute('target')"); // keep it in this tab, so it's in the video
-        await s.ClickAsync(link, "Michael's link");
+        await s.ClickAsync(link, "George's link");
         await s.Page.WaitForURLAsync(new Regex("/g/"));
         await s.Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-        await s.NoteAsync(s.Page.Locator(".player-page"), "Michael's game page",
+        await s.NoteAsync(s.Page.Locator(".player-page"), "George's game page",
             "What it is, when and where, who's playing, who's invited, and his choices. On his phone, this is a normal web page.");
         await s.ClickAsync(s.Page.GetByRole(AriaRole.Button, new() { Name = "Yes, I'm in" }), "Yes, I'm in");
         await s.Page.Locator("p.result").WaitForAsync();
@@ -172,7 +172,7 @@ sealed class Tour(Stage s)
         await s.GoInteractiveAsync("/dev/simulator");
         await s.ClickAsync(s.PhoneButton("Mike", "NO"), "Mike: NO");
         await TextNoteAsync("Mike", "Got it", "Mike says NO",
-            "Three are in (Phil, Hyo, Michael), and nobody invited is left to answer. Even if everyone said yes, it can't fill.");
+            "Three are in (Phil, Kayla, George), and nobody invited is left to answer. Even if everyone said yes, it can't fill.");
         await TextNoteAsync("Phil", "can't fill", "Phil is told right away",
             "One text: how many are in, how many are still waiting, how many more to invite, and a link to the game page.");
     }
@@ -184,29 +184,29 @@ sealed class Tour(Stage s)
             "And below it, everyone else Phil could invite.");
 
         await s.NoteAsync(s.Page.Locator("table.list.compact"), "Phil invites two more",
-            "Ben and Nick. There's one spot and two invitations: whoever says yes first gets it.");
-        await s.ClickAsync(RosterButton("Ben", "Invite"), "Invite Ben");
-        await s.ClickAsync(RosterButton("Nick", "Invite"), "Invite Nick");
+            "Kevin and Steve. There's one spot and two invitations: whoever says yes first gets it.");
+        await s.ClickAsync(RosterButton("Kevin", "Invite"), "Invite Kevin");
+        await s.ClickAsync(RosterButton("Steve", "Invite"), "Invite Steve");
         await s.ClickAsync(s.Page.GetByRole(AriaRole.Button, new() { Name = "Send invitations" }));
         await s.PauseAsync(1200);
 
         await s.GoInteractiveAsync("/dev/simulator");
-        await s.WaitForMessageAsync("Nick", "Reply YES or NO");
-        await s.NoteAsync(Messages(("Ben", "Reply YES or NO"), ("Nick", "Reply YES or NO")), "Both get the same invitation",
-            "Ben's and Nick's: the one open spot, and a link to each one's own page.");
+        await s.WaitForMessageAsync("Steve", "Reply YES or NO");
+        await s.NoteAsync(Messages(("Kevin", "Reply YES or NO"), ("Steve", "Reply YES or NO")), "Both get the same invitation",
+            "Kevin's and Steve's: the one open spot, and a link to each one's own page.");
     }
 
     private async Task GameOnAsync()
     {
-        await s.ClickAsync(s.PhoneButton("Ben", "YES"), "Ben: YES");
-        await TextNoteAsync("Ben", "Game on", "Ben texts YES first",
-            "That's the fourth player. The game is full, and Ben gets \"Game on\" with the final roster.");
-        await TextNoteAsync("Nick", "filled up", "Nick is told it filled",
+        await s.ClickAsync(s.PhoneButton("Kevin", "YES"), "Kevin: YES");
+        await TextNoteAsync("Kevin", "Game on", "Kevin texts YES first",
+            "That's the fourth player. The game is full, and Kevin gets \"Game on\" with the final roster.");
+        await TextNoteAsync("Steve", "filled up", "Steve is told it filled",
             "His invitation closes with a thank-you, so he isn't left waiting for an answer.");
 
         await s.WaitForMessageAsync("Phil", "is full");
-        await s.NoteAsync(Messages(("Hyo", "Game on"), ("Michael", "Game on")), "Game on for everyone",
-            "Hyo and Michael, already in, get the same \"Game on\" text with the final roster.");
+        await s.NoteAsync(Messages(("Kayla", "Game on"), ("George", "Game on")), "Game on for everyone",
+            "Kayla and George, already in, get the same \"Game on\" text with the final roster.");
         await TextNoteAsync("Phil", "is full", "And one text for Phil",
             "His game is full. As a player he'd also get \"Game on\", but he gets one text, not two.");
     }
@@ -215,10 +215,10 @@ sealed class Tour(Stage s)
 
     private async Task DropOutAsync()
     {
-        await s.TitleCardAsync("Plans change", "Hyo can't make it after all.");
-        await s.NoteAsync(s.PhoneButton("Hyo", "OUT"), "Hyo texts OUT", "OUT is how a player drops out of a game they said yes to.");
-        await s.ClickAsync(s.PhoneButton("Hyo", "OUT"), "Hyo: OUT");
-        await TextNoteAsync("Hyo", "You're out", "Hyo is out",
+        await s.TitleCardAsync("Plans change", "Kayla can't make it after all.");
+        await s.NoteAsync(s.PhoneButton("Kayla", "OUT"), "Kayla texts OUT", "OUT is how a player drops out of a game they said yes to.");
+        await s.ClickAsync(s.PhoneButton("Kayla", "OUT"), "Kayla: OUT");
+        await TextNoteAsync("Kayla", "You're out", "Kayla is out",
             "And she's told the organizer knows, so she doesn't need to text Phil separately.");
         await TextNoteAsync("Phil", "dropped from", "Phil gets one text",
             "Who dropped, that a spot is open, that nobody is waiting to answer, and a link to the game page.");
@@ -228,18 +228,18 @@ sealed class Tour(Stage s)
     {
         await s.GoInteractiveAsync(_gamePath);
         await s.NoteAsync(s.Page.Locator("section.roster"), "Phil's options",
-            "The game is open again, with one spot. Hyo is listed under \"Dropped out\".");
+            "The game is open again, with one spot. Kayla is listed under \"Dropped out\".");
 
         var reinvite = s.Page.Locator(".card", new() { Has = s.Page.GetByRole(AriaRole.Button, new() { Name = "Re-invite them" }) });
         await s.NoteAsync(reinvite, "Option 1: re-invite with one tap",
-            "Nick was told the game filled. One button asks him again.");
+            "Steve was told the game filled. One button asks him again.");
         await s.NoteAsync(s.Page.Locator("table.list.compact"), "Option 2: invite someone new",
             "Anyone who has signed up and hasn't already said no to this game.");
 
-        await s.NoteAsync(null, "Phil does both", "He re-invites Nick, and invites Jed.");
-        await s.ClickAsync(reinvite.GetByRole(AriaRole.Button, new() { Name = "Re-invite them" }), "Re-invite Nick");
+        await s.NoteAsync(null, "Phil does both", "He re-invites Steve, and invites DJ.");
+        await s.ClickAsync(reinvite.GetByRole(AriaRole.Button, new() { Name = "Re-invite them" }), "Re-invite Steve");
         await s.PauseAsync(1200);
-        await s.ClickAsync(RosterButton("Jed", "Invite"), "Invite Jed");
+        await s.ClickAsync(RosterButton("DJ", "Invite"), "Invite DJ");
         await s.ClickAsync(s.Page.GetByRole(AriaRole.Button, new() { Name = "Send invitations" }));
         await s.PauseAsync(1200);
     }
@@ -247,18 +247,18 @@ sealed class Tour(Stage s)
     private async Task RefillAsync()
     {
         await s.GoInteractiveAsync("/dev/simulator");
-        await s.WaitForMessageAsync("Nick", "Reply YES or NO", after: 1);
-        await s.WaitForMessageAsync("Jed", "Reply YES or NO");
-        await s.NoteAsync(Messages(("Nick", "Reply YES or NO"), ("Jed", "Reply YES or NO")), "Nick and Jed are invited",
-            "Nick gets a fresh invitation for the open spot, and Jed gets his first.");
+        await s.WaitForMessageAsync("Steve", "Reply YES or NO", after: 1);
+        await s.WaitForMessageAsync("DJ", "Reply YES or NO");
+        await s.NoteAsync(Messages(("Steve", "Reply YES or NO"), ("DJ", "Reply YES or NO")), "Steve and DJ are invited",
+            "Steve gets a fresh invitation for the open spot, and DJ gets his first.");
 
-        var gameOn = await s.CountMessagesAsync("Michael", "Game on");
+        var gameOn = await s.CountMessagesAsync("George", "Game on");
         var full = await s.CountMessagesAsync("Phil", "is full");
-        await s.ClickAsync(s.PhoneButton("Nick", "YES"), "Nick: YES");
-        await s.WaitForMessageAsync("Jed", "filled up");
-        await s.NoteAsync(Messages(("Nick", "Game on"), ("Jed", "filled up")), "Nick says YES",
-            "He takes the spot and gets \"Game on\". Jed is told it filled.");
-        await s.WaitForMessageAsync("Michael", "Game on", after: gameOn);
+        await s.ClickAsync(s.PhoneButton("Steve", "YES"), "Steve: YES");
+        await s.WaitForMessageAsync("DJ", "filled up");
+        await s.NoteAsync(Messages(("Steve", "Game on"), ("DJ", "filled up")), "Steve says YES",
+            "He takes the spot and gets \"Game on\". DJ is told it filled.");
+        await s.WaitForMessageAsync("George", "Game on", after: gameOn);
         await TextNoteAsync("Phil", "is full", "Full again", "The others get the new roster, and Phil gets one text. All good.", after: full);
     }
 
